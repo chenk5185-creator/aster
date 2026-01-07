@@ -1,0 +1,322 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Button, NumberInput, Select } from '../common';
+import { useGridStore, useMarketStore, useCredentialsStore } from '../../stores';
+import { GridCalculator } from '../../services/grid';
+import { accountApi } from '../../services/api';
+import type { GridConfig, GridType } from '../../types';
+import { formatNumber, formatPercent } from '../../utils/format';
+import { ChevronDown, ChevronUp, AlertTriangle, Info } from 'lucide-react';
+
+export const GridConfigPanel: React.FC = () => {
+  const { currentConfig, setConfig, createGrid, isCreating, error } = useGridStore();
+  const { currentSymbol, symbolInfo, price } = useMarketStore();
+  const { isUnlocked } = useCredentialsStore();
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [feeRate, setFeeRate] = useState(0.001);
+
+  // Load balance and fee rate
+  useEffect(() => {
+    if (!isUnlocked || !symbolInfo) return;
+
+    const loadData = async () => {
+      try {
+        const bal = await accountApi.getAvailableBalance(symbolInfo.quoteAsset);
+        setBalance(bal);
+
+        const fees = await accountApi.getFeeRates();
+        setFeeRate(fees.maker);
+      } catch (e) {
+        console.error('Failed to load account data:', e);
+      }
+    };
+
+    loadData();
+  }, [isUnlocked, symbolInfo]);
+
+  // Update symbol in config when it changes
+  useEffect(() => {
+    setConfig({ symbol: currentSymbol });
+  }, [currentSymbol, setConfig]);
+
+  // Calculate grid preview
+  const gridPreview = useMemo(() => {
+    const { upperPrice, lowerPrice, gridCount, gridType, investmentAmount } = currentConfig;
+
+    if (!upperPrice || !lowerPrice || !gridCount || !price) {
+      return null;
+    }
+
+    const levels = GridCalculator.calculateLevels(
+      upperPrice,
+      lowerPrice,
+      gridCount,
+      gridType || 'ARITHMETIC'
+    );
+
+    const buyGrids = GridCalculator.countBuyGrids(levels, price);
+    const profitStats = GridCalculator.calculateProfitRate(levels, feeRate);
+    const amountPerGrid = investmentAmount ? investmentAmount / Math.max(buyGrids, 1) : 0;
+
+    return {
+      levels,
+      buyGrids,
+      sellGrids: gridCount - buyGrids,
+      profitStats,
+      amountPerGrid,
+    };
+  }, [currentConfig, price, feeRate]);
+
+  // Validation
+  const validation = useMemo(() => {
+    if (!symbolInfo || !price) return null;
+
+    const config = currentConfig as GridConfig;
+    if (!config.upperPrice || !config.lowerPrice || !config.gridCount || !config.investmentAmount) {
+      return null;
+    }
+
+    return GridCalculator.validate(config, symbolInfo, price, balance, feeRate);
+  }, [currentConfig, symbolInfo, price, balance, feeRate]);
+
+  const handleCreate = async () => {
+    if (!symbolInfo || !validation?.isValid) return;
+
+    const config: GridConfig = {
+      symbol: currentSymbol,
+      upperPrice: currentConfig.upperPrice!,
+      lowerPrice: currentConfig.lowerPrice!,
+      gridCount: currentConfig.gridCount!,
+      gridType: currentConfig.gridType || 'ARITHMETIC',
+      investmentAmount: currentConfig.investmentAmount!,
+      triggerPrice: currentConfig.triggerPrice,
+      stopUpperPrice: currentConfig.stopUpperPrice,
+      stopLowerPrice: currentConfig.stopLowerPrice,
+      cancelOrdersOnStop: currentConfig.cancelOrdersOnStop ?? true,
+      sellAllOnStop: currentConfig.sellAllOnStop ?? false,
+    };
+
+    try {
+      const gridId = await createGrid(config, symbolInfo);
+      console.log('Grid created:', gridId);
+    } catch (e) {
+      console.error('Failed to create grid:', e);
+    }
+  };
+
+  const gridTypeOptions = [
+    { value: 'ARITHMETIC', label: 'Arithmetic (Equal Spacing)' },
+    { value: 'GEOMETRIC', label: 'Geometric (Equal Ratio)' },
+  ];
+
+  if (!isUnlocked) {
+    return (
+      <div className="card">
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <AlertTriangle className="h-12 w-12 text-warning mb-4" />
+          <h3 className="text-lg font-medium text-text-primary mb-2">API Credentials Required</h3>
+          <p className="text-text-secondary text-sm">
+            Please configure your API credentials to start grid trading.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card space-y-4">
+      <h2 className="text-lg font-semibold text-text-primary">Grid Configuration</h2>
+
+      {/* Price Range */}
+      <div className="grid grid-cols-2 gap-3">
+        <NumberInput
+          label="Upper Price"
+          value={currentConfig.upperPrice || ''}
+          onChange={(v) => setConfig({ upperPrice: v })}
+          min={0}
+          step={0.01}
+          placeholder="0.00"
+          rightAddon={<span className="text-xs">USDT</span>}
+        />
+        <NumberInput
+          label="Lower Price"
+          value={currentConfig.lowerPrice || ''}
+          onChange={(v) => setConfig({ lowerPrice: v })}
+          min={0}
+          step={0.01}
+          placeholder="0.00"
+          rightAddon={<span className="text-xs">USDT</span>}
+        />
+      </div>
+
+      {/* Current Price Info */}
+      {price > 0 && (
+        <div className="flex items-center gap-2 text-sm">
+          <Info className="h-4 w-4 text-text-muted" />
+          <span className="text-text-secondary">
+            Current price: <span className="text-text-primary font-medium">{formatNumber(price, 2)}</span> USDT
+          </span>
+        </div>
+      )}
+
+      {/* Grid Settings */}
+      <div className="grid grid-cols-2 gap-3">
+        <NumberInput
+          label="Grid Count"
+          value={currentConfig.gridCount || ''}
+          onChange={(v) => setConfig({ gridCount: Math.round(v) })}
+          min={2}
+          max={200}
+          step={1}
+          placeholder="10"
+        />
+        <Select
+          label="Grid Type"
+          value={currentConfig.gridType || 'ARITHMETIC'}
+          onValueChange={(v) => setConfig({ gridType: v as GridType })}
+          options={gridTypeOptions}
+        />
+      </div>
+
+      {/* Investment Amount */}
+      <NumberInput
+        label="Investment Amount"
+        value={currentConfig.investmentAmount || ''}
+        onChange={(v) => setConfig({ investmentAmount: v })}
+        min={0}
+        step={1}
+        placeholder="1000"
+        rightAddon={<span className="text-xs">USDT</span>}
+        hint={`Available: ${formatNumber(balance, 2)} USDT`}
+      />
+
+      {/* Grid Preview */}
+      {gridPreview && (
+        <div className="bg-surface-light rounded-lg p-3 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-text-secondary">Buy Orders</span>
+            <span className="text-primary">{gridPreview.buyGrids}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-text-secondary">Sell Orders</span>
+            <span className="text-text-muted">{gridPreview.sellGrids} (pending)</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-text-secondary">Amount per Grid</span>
+            <span className="text-text-primary">
+              {formatNumber(gridPreview.amountPerGrid, 2)} USDT
+            </span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-text-secondary">Est. Profit/Grid</span>
+            <span className={gridPreview.profitStats.avgProfitRate > 0 ? 'text-success' : 'text-error'}>
+              {formatPercent(gridPreview.profitStats.avgProfitRate)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Advanced Settings */}
+      <div>
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+        >
+          {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          Advanced Settings
+        </button>
+
+        {showAdvanced && (
+          <div className="mt-3 space-y-3 pt-3 border-t border-border">
+            <NumberInput
+              label="Trigger Price (Optional)"
+              value={currentConfig.triggerPrice || ''}
+              onChange={(v) => setConfig({ triggerPrice: v || undefined })}
+              min={0}
+              step={0.01}
+              placeholder="Grid starts when price reaches this"
+              rightAddon={<span className="text-xs">USDT</span>}
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <NumberInput
+                label="Stop Upper"
+                value={currentConfig.stopUpperPrice || ''}
+                onChange={(v) => setConfig({ stopUpperPrice: v || undefined })}
+                min={0}
+                step={0.01}
+                placeholder="Stop if price exceeds"
+                rightAddon={<span className="text-xs">USDT</span>}
+              />
+              <NumberInput
+                label="Stop Lower"
+                value={currentConfig.stopLowerPrice || ''}
+                onChange={(v) => setConfig({ stopLowerPrice: v || undefined })}
+                min={0}
+                step={0.01}
+                placeholder="Stop if price drops to"
+                rightAddon={<span className="text-xs">USDT</span>}
+              />
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <label className="text-sm text-text-secondary">Cancel orders on stop</label>
+              <input
+                type="checkbox"
+                checked={currentConfig.cancelOrdersOnStop ?? true}
+                onChange={(e) => setConfig({ cancelOrdersOnStop: e.target.checked })}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <label className="text-sm text-text-secondary">Sell all holdings on stop</label>
+              <input
+                type="checkbox"
+                checked={currentConfig.sellAllOnStop ?? false}
+                onChange={(e) => setConfig({ sellAllOnStop: e.target.checked })}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Validation Errors/Warnings */}
+      {validation && (
+        <div className="space-y-2">
+          {validation.errors.map((err, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm text-error">
+              <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{err}</span>
+            </div>
+          ))}
+          {validation.warnings.map((warn, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm text-warning">
+              <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <span>{warn}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error Display */}
+      {error && (
+        <div className="p-3 bg-error/10 border border-error/30 rounded-lg text-sm text-error">
+          {error}
+        </div>
+      )}
+
+      {/* Create Button */}
+      <Button
+        onClick={handleCreate}
+        disabled={!validation?.isValid || isCreating}
+        isLoading={isCreating}
+        className="w-full"
+      >
+        Create Grid
+      </Button>
+    </div>
+  );
+};
