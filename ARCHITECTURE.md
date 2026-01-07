@@ -102,9 +102,40 @@ ASTER 官方的网格交易工具**仅支持永续合约市场**，位于 Pro Mo
   - 取消所有挂单
   - 卖出所有持仓
 
-### 2.3 核心业务逻辑
+### 2.3 产品决策记录
 
-#### 2.3.1 网格计算算法
+> 以下决策已与产品负责人确认，作为开发实现的依据。
+
+#### 2.3.1 核心交易逻辑决策
+
+| 决策项 | 选择 | 说明 |
+|--------|------|------|
+| **初始持仓策略** | 纯买单启动 | 启动时只在当前价格以下放置买单，等待买入成交后再放置对应卖单。不进行初始建仓。 |
+| **资金分配** | 仅分配给买单网格 | `每格投资金额 = 总投资金额 / 当前价格以下的网格数量`。上方网格暂不占用资金。 |
+| **部分成交处理** | 等待完全成交 | 订单必须完全成交后，才在对应价格放置反向订单。部分成交时继续等待。 |
+| **价格跳空处理** | 忽略跳过的格子 | 价格快速跨越多个网格时，不追溯补单，继续在当前价格正常运行网格。 |
+
+#### 2.3.2 订单与风控决策
+
+| 决策项 | 选择 | 说明 |
+|--------|------|------|
+| **最小金额校验** | 创建前拒绝 | 如果单格金额 < 交易所 minNotional，拒绝创建网格并提示用户减少网格数量或增加投资金额。 |
+| **手续费计算** | 动态获取 | 调用 API 获取实际 maker/taker 费率，而非使用固定值。 |
+| **多网格支持** | 允许 | 同一交易对可以运行多个网格策略（不同价格区间）。 |
+
+#### 2.3.3 技术与平台决策
+
+| 决策项 | 选择 | 说明 |
+|--------|------|------|
+| **运行架构** | 纯前端方案 | 无后端服务，所有逻辑在浏览器中运行。API 凭证加密存储在本地。 |
+| **支持的链** | 仅 BSC | 初期只支持 BNB Smart Chain (chainId: 56)，不做多链切换。 |
+| **收益展示** | Quote 币种 | 收益统一以计价货币（如 USDT）展示，便于用户理解。 |
+
+---
+
+### 2.4 核心业务逻辑
+
+#### 2.4.1 网格计算算法
 
 **等差网格 (Arithmetic Grid):**
 ```
@@ -118,7 +149,7 @@ ASTER 官方的网格交易工具**仅支持永续合约市场**，位于 Pro Mo
 网格价格[i] = 价格下限 × 价差比例^i
 ```
 
-#### 2.3.2 订单分配策略
+#### 2.4.2 订单分配策略
 
 现货网格交易的订单分配：
 
@@ -137,7 +168,7 @@ ASTER 官方的网格交易工具**仅支持永续合约市场**，位于 Pro Mo
    每格买入数量 = 每格投资金额 / 对应网格价格
    ```
 
-#### 2.3.3 收益计算
+#### 2.4.3 收益计算
 
 ```
 单格收益 = 卖出价格 - 买入价格 - 手续费
@@ -145,7 +176,7 @@ ASTER 官方的网格交易工具**仅支持永续合约市场**，位于 Pro Mo
 收益率 = 总收益 / 投资金额 × 100%
 ```
 
-### 2.4 用户流程
+### 2.5 用户流程
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -442,11 +473,12 @@ export class GridCalculator {
 
   /**
    * 计算每格预期收益
+   * @param feeRate - 从 API 动态获取的手续费率
    */
   static calculateGridProfitPerLevel(
     levels: number[],
     gridType: GridType,
-    feeRate: number = 0.001 // 0.1% 手续费
+    feeRate: number // 动态获取，不使用默认值
   ): number[] {
     const profits: number[] = [];
 
@@ -454,6 +486,7 @@ export class GridCalculator {
       const buyPrice = levels[i];
       const sellPrice = levels[i + 1];
       const grossProfit = sellPrice - buyPrice;
+      // 买入用 taker 费率，卖出用 maker 费率（限价单）
       const fees = (buyPrice + sellPrice) * feeRate;
       profits.push(grossProfit - fees);
     }
@@ -1126,7 +1159,7 @@ async function encryptCredentials(credentials: Credentials, password: string) {
 
 ---
 
-## 六、开发里程碑
+## 七、开发里程碑
 
 ### Phase 1: 基础框架
 - 项目初始化和技术栈搭建
@@ -1154,7 +1187,7 @@ async function encryptCredentials(credentials: Credentials, password: string) {
 
 ---
 
-## 七、参考资源
+## 八、参考资源
 
 - **ASTER 官方文档**: https://docs.asterdex.com/
 - **网格交易文档**: https://docs.asterdex.com/product/aster-perpetual-pro/grid-trading
