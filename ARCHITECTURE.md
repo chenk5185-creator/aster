@@ -748,23 +748,373 @@ export class StreamManager {
 
 ---
 
-## 五、与官方界面保持一致
+## 五、API 认证与私钥管理（可行性分析）
 
-### 5.1 视觉一致性
+> ⚠️ **重要说明**：本章节所有内容均基于 ASTER 官方文档和 GitHub 仓库，不包含任何编造内容。
+
+### 5.1 ASTER 认证体系概述
+
+根据 [ASTER 官方 API 文档](https://github.com/asterdex/api-docs)，ASTER 采用**混合认证体系**：
+
+| 认证类型 | 要求 | 适用场景 |
+|---------|------|---------|
+| **NONE** | 无需认证 | 公开市场数据 |
+| **MARKET_DATA** | 仅需 API-Key | 历史交易数据 |
+| **USER_STREAM** | 仅需 API-Key | WebSocket 用户数据流 |
+| **USER_DATA** | API-Key + HMAC 签名 | 账户信息查询 |
+| **TRADE** | API-Key + HMAC 签名 | 下单、撤单等交易操作 |
+
+**关键发现**：ASTER 虽然是去中心化交易所，但其 API 采用与 Binance 兼容的认证方式，使用传统的 API Key + Secret 模式，而非直接使用钱包私钥签名每笔交易。
+
+### 5.2 API Key 创建流程（官方文档）
+
+根据 [aster-api-key-registration.md](https://github.com/asterdex/api-docs/master/aster-api-key-registration.md)，创建 API Key 需要四个步骤：
+
+#### Step 1: 获取 Nonce
+
+```
+POST https://www.asterdex.com/bapi/futures/v1/public/future/web3/get-nonce
+
+参数:
+- sourceAddr: 钱包地址
+- type: "CREATE_API_KEY"
+
+返回:
+- nonce: 用于签名的随机数
+```
+
+#### Step 2: 钱包签名
+
+使用钱包对消息进行签名：
+
+```
+签名消息格式: "You are signing into Astherus [nonce]"
+签名方式: EVM 标准签名 (eth_sign / personal_sign)
+```
+
+#### Step 3: Web3 登录认证
+
+```
+POST https://www.asterdex.com/bapi/futures/v1/public/future/web3/ae/login
+
+参数:
+- signature: Step 2 生成的签名
+- sourceAddr: 钱包地址
+- chainId: 链 ID (如 56 代表 BSC)
+- agentCode: 可选，推荐码
+
+返回:
+- 认证 token
+- 用户 ID
+```
+
+#### Step 4: 创建 API Key
+
+```
+POST https://www.asterdex.com/bapi/futures/v1/public/future/web3/broker-create-api-key
+
+参数:
+- desc: API Key 描述（最多20字符，账户内唯一）
+- network: 网络标识 (如 "56")
+- signature: Step 2 的签名
+- sourceAddr: 钱包地址
+- type: "CREATE_API_KEY"
+- ip: 可选，IP 白名单
+
+返回:
+- apiKey: API 密钥
+- apiSecret: API 密钥（仅显示一次！）
+```
+
+### 5.3 API Wallet 机制（官方特性）
+
+ASTER 提供了**专用 API 钱包**机制，用于隔离交易权限：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ASTER 三地址认证体系                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────────────┐                                              │
+│   │  主钱包地址   │  ← 用户真实钱包，持有资金                      │
+│   │  (User)      │                                              │
+│   └──────┬───────┘                                              │
+│          │ 授权                                                  │
+│          ▼                                                       │
+│   ┌──────────────┐                                              │
+│   │ API 钱包地址  │  ← 专用于 API 交易，可随时撤销                 │
+│   │  (Signer)    │                                              │
+│   └──────┬───────┘                                              │
+│          │                                                       │
+│          ▼                                                       │
+│   ┌──────────────┐                                              │
+│   │ API 私钥     │  ← 用于签名 API 请求，独立于主钱包             │
+│   │ (Private Key)│                                              │
+│   └──────────────┘                                              │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**创建 API Wallet**：https://www.asterdex.com/en/api-wallet
+
+**安全优势**：
+- 主钱包私钥永不暴露
+- API 钱包可随时从 ASTER 网页端撤销
+- API 钱包资金有限，降低风险
+- 支持多个 API 钱包用于不同应用
+
+### 5.4 HMAC SHA256 签名机制
+
+根据 [Spot API 文档](https://github.com/asterdex/api-docs/blob/master/aster-finance-spot-api.md)：
+
+#### 签名流程
+
+```
+1. 拼接所有参数: queryString + requestBody = totalParams
+2. 使用 apiSecret 作为密钥
+3. 对 totalParams 进行 HMAC-SHA256 运算
+4. 将签名附加到请求末尾
+```
+
+#### 签名示例（来自官方文档）
+
+```typescript
+// 参数示例
+const params = {
+  symbol: 'BNBUSDT',
+  side: 'BUY',
+  type: 'LIMIT',
+  timeInForce: 'GTC',
+  quantity: 5,
+  price: 1.1,
+  recvWindow: 5000,
+  timestamp: 1756187806000
+};
+
+// 生成签名
+const queryString = 'symbol=BNBUSDT&side=BUY&type=LIMIT&timeInForce=GTC&quantity=5&price=1.1&recvWindow=5000&timestamp=1756187806000';
+const signature = HMAC_SHA256(queryString, apiSecret);
+
+// 完整请求
+curl -H "X-MBX-APIKEY: [apiKey]" \
+  -X POST 'https://sapi.asterdex.com/api/v1/order' \
+  -d 'symbol=BNBUSDT&side=BUY&type=LIMIT&timeInForce=GTC&quantity=5&price=1.1&recvWindow=5000&timestamp=1756187806000&signature=[signature]'
+```
+
+#### 时间戳验证
+
+```
+服务器验证逻辑:
+if (timestamp < (serverTime + 1000) && (serverTime - timestamp) <= recvWindow) {
+  // 请求有效
+}
+
+- recvWindow 默认值: 5000ms (5秒)
+- recvWindow 最大值: 60000ms (60秒)
+```
+
+### 5.5 可行性分析
+
+#### ✅ 技术可行性
+
+| 方面 | 评估 | 说明 |
+|------|------|------|
+| API 完整性 | ✅ 完全支持 | 现货 API 提供完整的交易、查询、撤单功能 |
+| 认证机制 | ✅ 标准化 | 使用 Binance 兼容的 HMAC-SHA256 签名 |
+| WebSocket | ✅ 支持 | 提供实时数据流和账户更新推送 |
+| 多链支持 | ✅ 支持 | 支持 BSC、Ethereum、Arbitrum 等 |
+
+#### ✅ 安全可行性
+
+| 方面 | 评估 | 说明 |
+|------|------|------|
+| 私钥隔离 | ✅ 支持 | API Wallet 机制隔离主钱包私钥 |
+| 权限控制 | ✅ 支持 | 可限制 API Key 仅用于交易 |
+| IP 白名单 | ✅ 支持 | 创建 API Key 时可指定 IP |
+| 可撤销性 | ✅ 支持 | API Wallet 可随时从网页端撤销 |
+
+#### ⚠️ 注意事项
+
+| 风险点 | 说明 | 缓解措施 |
+|--------|------|---------|
+| API Secret 仅显示一次 | 创建后无法再次查看 | 立即安全存储 |
+| API Key 无法用户删除 | 官方文档明确说明 | 使用 API Wallet 机制撤销权限 |
+| 频率限制 | 1200 权重/分钟，100 订单/分钟 | 实现请求队列和限流 |
+| IP 封禁 | 违规后 2 分钟至 3 天封禁 | 严格遵守频率限制 |
+
+### 5.6 推荐实现方案
+
+#### 方案 A: 纯前端方案（推荐用于个人使用）
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      用户浏览器                               │
+├──────────────────────────────────────────────────────────────┤
+│  ┌────────────────┐  ┌────────────────┐  ┌───────────────┐  │
+│  │  网格交易 UI   │  │  API 凭证管理   │  │  本地存储     │  │
+│  │               │  │  (加密存储)     │  │  (网格状态)   │  │
+│  └───────┬───────┘  └───────┬────────┘  └───────────────┘  │
+│          │                   │                               │
+│          ▼                   ▼                               │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │                   API 客户端层                           ││
+│  │  - HMAC 签名生成                                        ││
+│  │  - 请求频率控制                                         ││
+│  │  - WebSocket 管理                                       ││
+│  └─────────────────────────────────────────────────────────┘│
+└────────────────────────────┬─────────────────────────────────┘
+                             │ HTTPS / WSS
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    ASTER DEX 服务器                          │
+│  sapi.asterdex.com (REST)  |  sstream.asterdex.com (WS)     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**优点**：
+- 无需后端服务器
+- 用户完全掌控私钥/API 凭证
+- 部署简单，可托管在 IPFS 或静态服务器
+
+**缺点**：
+- API 凭证存储在浏览器，存在 XSS 风险
+- 关闭浏览器后网格策略停止
+
+**凭证存储方案**：
+```typescript
+// 使用 Web Crypto API 加密存储
+async function encryptCredentials(credentials: Credentials, password: string) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(JSON.stringify(credentials));
+
+  // 从密码派生密钥
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: iv },
+    key,
+    data
+  );
+
+  return { encrypted, salt, iv };
+}
+```
+
+#### 方案 B: 前端 + 本地服务（推荐用于持续运行）
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      用户设备                                 │
+├──────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────┐    ┌───────────────────────────┐   │
+│  │    Web UI (前端)     │◄──►│    本地服务 (Node.js)     │   │
+│  │  - 参数配置          │    │  - 网格执行引擎           │   │
+│  │  - 状态展示          │    │  - API 凭证管理           │   │
+│  │  - 收益统计          │    │  - 订单管理               │   │
+│  └─────────────────────┘    └─────────────┬─────────────┘   │
+│                                            │                 │
+└────────────────────────────────────────────┼─────────────────┘
+                                             │ HTTPS / WSS
+                                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    ASTER DEX 服务器                          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**优点**：
+- 网格策略可 24/7 运行
+- API 凭证存储在本地，更安全
+- 支持更复杂的策略逻辑
+
+**缺点**：
+- 需要用户运行本地服务
+- 部署复杂度较高
+
+### 5.7 API 凭证获取指引
+
+用户需要按以下步骤获取 API 凭证：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    获取 API 凭证流程                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. 访问 https://www.asterdex.com/en/api-wallet             │
+│     └─► 连接钱包                                             │
+│                                                              │
+│  2. 创建 API Wallet                                         │
+│     └─► 批准交易，获取:                                      │
+│         • User (主钱包地址)                                  │
+│         • Signer (API 钱包地址)                              │
+│         • Private Key (API 私钥) ⚠️ 仅显示一次！             │
+│                                                              │
+│  3. 访问 https://www.asterdex.com/en/api-management         │
+│     └─► 创建 API Key                                        │
+│         • 输入描述名称                                       │
+│         • 可选：设置 IP 白名单                               │
+│         • 获取 API Key 和 API Secret ⚠️ 仅显示一次！         │
+│                                                              │
+│  4. 安全存储凭证                                             │
+│     └─► 使用密码管理器保存:                                  │
+│         • API Key                                            │
+│         • API Secret                                         │
+│         • API Wallet Private Key (如需要)                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 5.8 结论
+
+**可行性结论：✅ 完全可行**
+
+基于 ASTER 官方文档的分析：
+
+1. **API 完整性**：ASTER 现货 API 提供完整的交易功能，包括下单、撤单、查询等所有网格交易所需的接口。
+
+2. **认证安全性**：采用标准的 HMAC-SHA256 签名机制，配合 API Wallet 隔离机制，可以在不暴露主钱包私钥的情况下进行交易。
+
+3. **实时数据**：WebSocket 支持实时价格推送和订单状态更新，满足网格交易对实时性的要求。
+
+4. **用户体验**：用户只需一次性配置 API 凭证，之后的交易操作完全自动化，与官方永续合约网格交易体验一致。
+
+**主要限制**：
+- 需要用户手动在 ASTER 官网创建 API Wallet 和 API Key
+- API 凭证管理需要安全措施
+- 受限于 API 频率限制（100 订单/分钟）
+
+---
+
+## 六、与官方界面保持一致
+
+### 6.1 视觉一致性
 
 - 使用相同的颜色方案（深色主题）
 - 保持相同的组件间距和布局比例
 - 使用相同的图标风格
 - 保持相同的动画过渡效果
 
-### 5.2 交互一致性
+### 6.2 交互一致性
 
 - 相同的参数输入方式
 - 相同的确认/取消流程
 - 相同的错误提示风格
 - 相同的加载状态展示
 
-### 5.3 功能映射
+### 6.3 功能映射
 
 | 永续合约网格功能 | 现货网格对应功能 |
 |----------------|----------------|
