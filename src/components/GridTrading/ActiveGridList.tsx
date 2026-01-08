@@ -1,7 +1,7 @@
 import React from 'react';
 import { useGridStore, useMarketStore } from '../../stores';
 import { Button } from '../common';
-import { formatNumber, formatPercent, formatDateTime } from '../../utils/format';
+import { formatNumber, formatPercent, formatDateTime, formatSmartPrice } from '../../utils/format';
 import type { GridInstance, GridStatus } from '../../types';
 import { Play, Square, Trash2, TrendingUp, TrendingDown, Clock, Grid3X3 } from 'lucide-react';
 
@@ -146,7 +146,7 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
                 <div>
                   <span className="text-text-muted block">当前价格</span>
                   <span className="text-text-primary">
-                    {currentPrice > 0 ? formatNumber(currentPrice, 2) : '-'}
+                    {currentPrice > 0 ? formatSmartPrice(currentPrice) : '-'}
                   </span>
                 </div>
               </div>

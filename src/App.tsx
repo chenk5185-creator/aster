@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Header } from './components/Layout';
-import { GridConfigPanel, ActiveGridList, GridDetailModal } from './components/GridTrading';
+import { GridConfigPanel, ActiveGridList, GridDetailModal, OrderBookPanel, ChartPanel } from './components/GridTrading';
 import { useMarketStore, useGridStore } from './stores';
 import type { GridInstance } from './types';
 
@@ -32,14 +32,16 @@ function App() {
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Grid Configuration Panel */}
-          <div className="lg:col-span-1">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* 左侧：网格配置 + 盘口 */}
+          <div className="lg:col-span-3 space-y-6">
             <GridConfigPanel />
+            <OrderBookPanel />
           </div>
 
-          {/* Active Grids List */}
-          <div className="lg:col-span-2">
+          {/* 中间：K线图 + 活跃网格 */}
+          <div className="lg:col-span-9 space-y-6">
+            <ChartPanel />
             <ActiveGridList onSelectGrid={setSelectedGrid} />
           </div>
         </div>

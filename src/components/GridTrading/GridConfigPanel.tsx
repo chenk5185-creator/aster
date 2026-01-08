@@ -4,7 +4,7 @@ import { useGridStore, useMarketStore, useCredentialsStore } from '../../stores'
 import { GridCalculator } from '../../services/grid';
 import { accountApi } from '../../services/api';
 import type { GridConfig, GridType } from '../../types';
-import { formatNumber, formatPercent } from '../../utils/format';
+import { formatNumber, formatPercent, formatSmartPrice } from '../../utils/format';
 import { ChevronDown, ChevronUp, AlertTriangle, Info } from 'lucide-react';
 
 export const GridConfigPanel: React.FC = () => {
@@ -155,7 +155,7 @@ export const GridConfigPanel: React.FC = () => {
         <div className="flex items-center gap-2 text-sm">
           <Info className="h-4 w-4 text-text-muted" />
           <span className="text-text-secondary">
-            当前价格：<span className="text-text-primary font-medium">{formatNumber(price, 2)}</span> USDT
+            当前价格：<span className="text-text-primary font-medium">{formatSmartPrice(price)}</span> {symbolInfo?.quoteAsset || 'USDT'}
           </span>
         </div>
       )}
