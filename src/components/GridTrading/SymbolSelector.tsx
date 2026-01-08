@@ -12,6 +12,7 @@ export const SymbolSelector: React.FC<SymbolSelectorProps> = ({ onSymbolChange }
 
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedQuoteAsset, setSelectedQuoteAsset] = useState<string>('ALL');
   const [favorites, setFavorites] = useState<string[]>(() => {
     const saved = localStorage.getItem('aster-favorite-symbols');
     return saved ? JSON.parse(saved) : ['BTCUSDT', 'ETHUSDT', 'BNBUSDT'];
@@ -44,27 +45,47 @@ export const SymbolSelector: React.FC<SymbolSelectorProps> = ({ onSymbolChange }
     localStorage.setItem('aster-favorite-symbols', JSON.stringify(favorites));
   }, [favorites]);
 
+  // 获取所有可用的计价货币
+  const availableQuoteAssets = useMemo(() => {
+    const assets = new Set(symbols.map((s) => s.quoteAsset));
+    return ['ALL', ...Array.from(assets).sort()];
+  }, [symbols]);
+
   const filteredSymbols = useMemo(() => {
-    if (!searchQuery.trim()) {
-      // Show favorites first, then other popular symbols
-      const favoriteSymbols = symbols.filter((s) => favorites.includes(s.symbol));
-      const otherSymbols = symbols.filter((s) => !favorites.includes(s.symbol));
-      return [...favoriteSymbols, ...otherSymbols.slice(0, 20)];
+    let filtered = symbols;
+
+    // 按计价货币筛选
+    if (selectedQuoteAsset !== 'ALL') {
+      filtered = filtered.filter((s) => s.quoteAsset === selectedQuoteAsset);
     }
 
-    const query = searchQuery.toUpperCase();
-    return symbols.filter(
-      (s) =>
-        s.symbol.includes(query) ||
-        s.baseAsset.includes(query)
-    );
-  }, [symbols, searchQuery, favorites]);
+    // 按搜索关键词筛选
+    if (searchQuery.trim()) {
+      const query = searchQuery.toUpperCase();
+      filtered = filtered.filter(
+        (s) =>
+          s.symbol.includes(query) ||
+          s.baseAsset.includes(query) ||
+          s.quoteAsset.includes(query)
+      );
+    }
+
+    // 如果没有搜索，显示收藏+热门
+    if (!searchQuery.trim()) {
+      const favoriteSymbols = filtered.filter((s) => favorites.includes(s.symbol));
+      const otherSymbols = filtered.filter((s) => !favorites.includes(s.symbol));
+      return [...favoriteSymbols, ...otherSymbols.slice(0, 30)];
+    }
+
+    return filtered;
+  }, [symbols, searchQuery, selectedQuoteAsset, favorites]);
 
   const handleSelect = (symbol: string) => {
     setCurrentSymbol(symbol);
     onSymbolChange?.(symbol);
     setIsOpen(false);
     setSearchQuery('');
+    setSelectedQuoteAsset('ALL');
   };
 
   const toggleFavorite = (e: React.MouseEvent, symbol: string) => {
@@ -108,7 +129,7 @@ export const SymbolSelector: React.FC<SymbolSelectorProps> = ({ onSymbolChange }
       {isOpen && (
         <div className="absolute top-full left-0 mt-2 w-80 bg-surface border border-border rounded-lg shadow-lg z-50">
           {/* Search */}
-          <div className="p-3 border-b border-border">
+          <div className="p-3 border-b border-border space-y-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
               <input
@@ -116,18 +137,35 @@ export const SymbolSelector: React.FC<SymbolSelectorProps> = ({ onSymbolChange }
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search symbol..."
+                placeholder="搜索交易对..."
                 className="w-full pl-10 pr-4 py-2 bg-surface-light rounded-lg border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary"
               />
+            </div>
+
+            {/* Quote Asset Filter */}
+            <div className="flex gap-1 flex-wrap">
+              {availableQuoteAssets.map((asset) => (
+                <button
+                  key={asset}
+                  onClick={() => setSelectedQuoteAsset(asset)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedQuoteAsset === asset
+                      ? 'bg-primary text-white'
+                      : 'bg-surface-light text-text-secondary hover:bg-surface hover:text-text-primary'
+                  }`}
+                >
+                  {asset === 'ALL' ? '全部' : asset}
+                </button>
+              ))}
             </div>
           </div>
 
           {/* Symbol List */}
           <div className="max-h-80 overflow-y-auto">
             {isLoadingSymbols ? (
-              <div className="p-4 text-center text-text-muted">Loading symbols...</div>
+              <div className="p-4 text-center text-text-muted">加载交易对中...</div>
             ) : filteredSymbols.length === 0 ? (
-              <div className="p-4 text-center text-text-muted">No symbols found</div>
+              <div className="p-4 text-center text-text-muted">未找到交易对</div>
             ) : (
               <div className="py-2">
                 {filteredSymbols.map((symbol) => {
@@ -157,12 +195,12 @@ export const SymbolSelector: React.FC<SymbolSelectorProps> = ({ onSymbolChange }
                             <span className="text-text-muted font-normal">/{symbol.quoteAsset}</span>
                           </div>
                           <div className="text-xs text-text-muted">
-                            {symbol.status === 'TRADING' ? 'Trading' : symbol.status}
+                            {symbol.status === 'TRADING' ? '交易中' : symbol.status}
                           </div>
                         </div>
                       </div>
                       {isSelected && (
-                        <div className="text-primary text-sm">Selected</div>
+                        <div className="text-primary text-sm">已选择</div>
                       )}
                     </button>
                   );
