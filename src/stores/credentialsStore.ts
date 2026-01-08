@@ -2,15 +2,17 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import CryptoJS from 'crypto-js';
 import { apiClient, type ApiCredentials } from '../services/api';
+import { backendApi } from '../services/api/backend';
 
 interface CredentialsState {
   isUnlocked: boolean;
   hasCredentials: boolean;
   encryptedCredentials: string | null;
+  userId: string | null;
 
   // Actions
-  saveCredentials: (credentials: ApiCredentials, password: string) => void;
-  unlockCredentials: (password: string) => boolean;
+  saveCredentials: (credentials: ApiCredentials, password: string) => Promise<void>;
+  unlockCredentials: (password: string) => Promise<boolean>;
   lockCredentials: () => void;
   clearCredentials: () => void;
   getCredentials: () => ApiCredentials | null;
@@ -129,21 +131,42 @@ export const useCredentialsStore = create<CredentialsState>()(
       isUnlocked: false,
       hasCredentials: false,
       encryptedCredentials: null,
+      userId: null,
 
-      saveCredentials: (credentials: ApiCredentials, password: string) => {
+      saveCredentials: async (credentials: ApiCredentials, password: string) => {
         const encrypted = encryptCredentials(credentials, password);
         unlockedCredentials = credentials;
         apiClient.setCredentials(credentials);
 
-        set({
-          encryptedCredentials: encrypted,
-          hasCredentials: true,
-          isUnlocked: true,
-        });
+        try {
+          // Sync to backend
+          const existingUserId = get().userId;
+          const userId = await backendApi.setupUser(
+            credentials.apiKey,
+            credentials.apiSecret,
+            password,
+            existingUserId || undefined
+          );
+
+          set({
+            encryptedCredentials: encrypted,
+            hasCredentials: true,
+            isUnlocked: true,
+            userId,
+          });
+        } catch (error) {
+          console.error('Failed to sync credentials to backend:', error);
+          // Still save locally even if backend sync fails
+          set({
+            encryptedCredentials: encrypted,
+            hasCredentials: true,
+            isUnlocked: true,
+          });
+        }
       },
 
-      unlockCredentials: (password: string): boolean => {
-        const { encryptedCredentials } = get();
+      unlockCredentials: async (password: string): Promise<boolean> => {
+        const { encryptedCredentials, userId } = get();
         if (!encryptedCredentials) return false;
 
         const credentials = decryptCredentials(encryptedCredentials, password);
@@ -151,6 +174,11 @@ export const useCredentialsStore = create<CredentialsState>()(
 
         unlockedCredentials = credentials;
         apiClient.setCredentials(credentials);
+
+        // Set backend credentials
+        if (userId) {
+          backendApi.setCredentials(userId, password);
+        }
 
         set({ isUnlocked: true });
         return true;
@@ -195,6 +223,7 @@ export const useCredentialsStore = create<CredentialsState>()(
       partialize: (state) => ({
         encryptedCredentials: state.encryptedCredentials,
         hasCredentials: state.hasCredentials,
+        userId: state.userId,
       }),
     }
   )

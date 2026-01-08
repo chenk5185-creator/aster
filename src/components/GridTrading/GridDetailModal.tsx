@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal, Button } from '../common';
 import { useGridStore, useMarketStore } from '../../stores';
 import { formatNumber, formatPercent, formatDateTime, formatSmartPrice } from '../../utils/format';
@@ -16,10 +16,21 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { startGrid, stopGrid, removeGrid } = useGridStore();
+  const { startGrid, stopGrid, removeGrid, refreshGrid } = useGridStore();
   const { prices } = useMarketStore();
   const [isLoading, setIsLoading] = useState(false);
   const [sellOnStop, setSellOnStop] = useState(false);
+
+  // Auto-refresh grid data every 3 seconds when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const refreshInterval = setInterval(() => {
+      refreshGrid(grid.id);
+    }, 3000);
+
+    return () => clearInterval(refreshInterval);
+  }, [isOpen, grid.id, refreshGrid]);
 
   const currentPrice = prices.get(grid.config.symbol) || 0;
   const profitColor = grid.profit.totalProfit >= 0 ? 'text-success' : 'text-error';

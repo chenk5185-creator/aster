@@ -1,22 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { v4 as uuidv4 } from 'uuid';
 import type {
   GridConfig,
   GridInstance,
-  GridStatus,
-  GridProfit,
-  GridLevel,
   SymbolInfo,
 } from '../types';
-import { GridCalculator, GridOrderManager } from '../services/grid';
-import { tradingApi, accountApi, marketApi } from '../services/api';
+import { GridCalculator } from '../services/grid';
+import { accountApi, marketApi } from '../services/api';
+import { backendApi } from '../services/api/backend';
 
 interface GridState {
   // Data
   activeGrids: GridInstance[];
   currentConfig: Partial<GridConfig>;
-  managers: Map<string, GridOrderManager>;
 
   // UI State
   isCreating: boolean;
@@ -29,10 +25,9 @@ interface GridState {
   createGrid: (config: GridConfig, symbolInfo: SymbolInfo) => Promise<string>;
   startGrid: (gridId: string) => Promise<void>;
   stopGrid: (gridId: string, sellHoldings?: boolean) => Promise<void>;
-  removeGrid: (gridId: string) => void;
-  updateGridStatus: (gridId: string, status: GridStatus) => void;
-  updateGridProfit: (gridId: string, profit: GridProfit) => void;
-  loadGrids: () => void;
+  removeGrid: (gridId: string) => Promise<void>;
+  loadGrids: () => Promise<void>;
+  refreshGrid: (gridId: string) => Promise<void>;
 }
 
 const defaultConfig: Partial<GridConfig> = {
@@ -44,10 +39,9 @@ const defaultConfig: Partial<GridConfig> = {
 
 export const useGridStore = create<GridState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       activeGrids: [],
       currentConfig: { ...defaultConfig },
-      managers: new Map(),
       isCreating: false,
       isLoading: false,
       error: null,
@@ -66,16 +60,11 @@ export const useGridStore = create<GridState>()(
         set({ isCreating: true, error: null });
 
         try {
-          // Get fee rates
+          // Get fee rates and validate locally first
           const fees = await accountApi.getFeeRates();
-
-          // Get current price
           const currentPrice = await marketApi.getPrice(config.symbol);
+          const balance = await accountApi.getAvailableBalance(symbolInfo.quoteAsset);
 
-          // Validate configuration
-          const balance = await accountApi.getAvailableBalance(
-            symbolInfo.quoteAsset
-          );
           const validation = GridCalculator.validate(
             config,
             symbolInfo,
@@ -88,101 +77,35 @@ export const useGridStore = create<GridState>()(
             throw new Error(validation.errors.join('; '));
           }
 
-          // Create grid instance
-          const gridId = uuidv4().slice(0, 8);
-          const levels = GridCalculator.calculateLevels(
-            config.upperPrice,
-            config.lowerPrice,
-            config.gridCount,
-            config.gridType
-          );
+          // Create grid on backend
+          const { gridId, grid } = await backendApi.createGrid(config);
 
-          const gridLevels: GridLevel[] = levels.map((price, index) => ({
-            index,
-            price,
-            status: 'EMPTY' as const,
-          }));
-
-          const gridInstance: GridInstance = {
-            id: gridId,
-            config,
-            status: 'PENDING',
-            createdAt: Date.now(),
-            gridLevels,
-            orders: [],
-            profit: {
-              realizedProfit: 0,
-              unrealizedProfit: 0,
-              totalProfit: 0,
-              profitRate: 0,
-              tradingCount: 0,
-              totalFees: 0,
-            },
-            baseAssetHolding: 0,
-          };
-
-          // Create order manager
-          const manager = new GridOrderManager(
-            gridInstance,
-            symbolInfo,
-            tradingApi,
-            marketApi,
-            fees
-          );
-
-          // Subscribe to events
-          manager.onEvent((event) => {
-            const { activeGrids } = get();
-            const gridIndex = activeGrids.findIndex((g) => g.id === gridId);
-            if (gridIndex === -1) return;
-
-            const updatedInstance = manager.getInstance();
-            const newGrids = [...activeGrids];
-            newGrids[gridIndex] = updatedInstance;
-            set({ activeGrids: newGrids });
-
-            if (event.type === 'ERROR') {
-              set({ error: event.message });
-            }
-          });
-
-          // Store manager
-          const { managers } = get();
-          managers.set(gridId, manager);
-
-          // Add to active grids
+          // Add to local state
           set((state) => ({
-            activeGrids: [...state.activeGrids, gridInstance],
+            activeGrids: [...state.activeGrids, grid],
             currentConfig: { ...defaultConfig },
+            isCreating: false,
           }));
 
           return gridId;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
-          set({ error: message });
+          set({ error: message, isCreating: false });
           throw error;
-        } finally {
-          set({ isCreating: false });
         }
       },
 
       startGrid: async (gridId: string) => {
-        const { managers, activeGrids } = get();
-        const manager = managers.get(gridId);
-
-        if (!manager) {
-          throw new Error('Grid manager not found');
-        }
-
         try {
-          await manager.start();
+          // Start grid on backend
+          const grid = await backendApi.startGrid(gridId);
 
-          // Get updated instance from manager (includes RUNNING status)
-          const updatedInstance = manager.getInstance();
-          const updatedGrids = activeGrids.map((g) =>
-            g.id === gridId ? updatedInstance : g
-          );
-          set({ activeGrids: updatedGrids });
+          // Update local state
+          set((state) => ({
+            activeGrids: state.activeGrids.map((g) =>
+              g.id === gridId ? grid : g
+            ),
+          }));
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           set({ error: message });
@@ -191,22 +114,16 @@ export const useGridStore = create<GridState>()(
       },
 
       stopGrid: async (gridId: string, sellHoldings: boolean = false) => {
-        const { managers, activeGrids } = get();
-        const manager = managers.get(gridId);
-
-        if (!manager) {
-          throw new Error('Grid manager not found');
-        }
-
         try {
-          await manager.stop(sellHoldings);
+          // Stop grid on backend
+          const grid = await backendApi.stopGrid(gridId, sellHoldings);
 
-          // Update grid status
-          const updatedInstance = manager.getInstance();
-          const updatedGrids = activeGrids.map((g) =>
-            g.id === gridId ? updatedInstance : g
-          );
-          set({ activeGrids: updatedGrids });
+          // Update local state
+          set((state) => ({
+            activeGrids: state.activeGrids.map((g) =>
+              g.id === gridId ? grid : g
+            ),
+          }));
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           set({ error: message });
@@ -214,54 +131,54 @@ export const useGridStore = create<GridState>()(
         }
       },
 
-      removeGrid: (gridId: string) => {
-        const { managers } = get();
+      removeGrid: async (gridId: string) => {
+        try {
+          // Delete grid on backend
+          await backendApi.deleteGrid(gridId);
 
-        // Stop and remove manager
-        const manager = managers.get(gridId);
-        if (manager && manager.getIsRunning()) {
-          manager.stop().catch(console.error);
+          // Remove from local state
+          set((state) => ({
+            activeGrids: state.activeGrids.filter((g) => g.id !== gridId),
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          set({ error: message });
+          throw error;
         }
-        managers.delete(gridId);
-
-        // Remove from active grids
-        set((state) => ({
-          activeGrids: state.activeGrids.filter((g) => g.id !== gridId),
-        }));
       },
 
-      updateGridStatus: (gridId: string, status: GridStatus) => {
-        set((state) => ({
-          activeGrids: state.activeGrids.map((g) =>
-            g.id === gridId ? { ...g, status } : g
-          ),
-        }));
+      loadGrids: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          // Load grids from backend
+          const grids = await backendApi.getGrids();
+          set({ activeGrids: grids, isLoading: false });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          set({ error: message, isLoading: false });
+        }
       },
 
-      updateGridProfit: (gridId: string, profit: GridProfit) => {
-        set((state) => ({
-          activeGrids: state.activeGrids.map((g) =>
-            g.id === gridId ? { ...g, profit } : g
-          ),
-        }));
-      },
+      refreshGrid: async (gridId: string) => {
+        try {
+          // Refresh single grid from backend
+          const grid = await backendApi.getGrid(gridId);
 
-      loadGrids: () => {
-        // Called on app init to restore managers for persisted grids
-        // Note: Running grids cannot be automatically resumed
-        // They need to be manually restarted
-        set((state) => ({
-          activeGrids: state.activeGrids.map((g) => ({
-            ...g,
-            status: g.status === 'RUNNING' ? 'STOPPED' : g.status,
-          })),
-        }));
+          set((state) => ({
+            activeGrids: state.activeGrids.map((g) =>
+              g.id === gridId ? grid : g
+            ),
+          }));
+        } catch (error) {
+          console.error('Failed to refresh grid:', error);
+        }
       },
     }),
     {
       name: 'aster-spot-grid-storage',
       partialize: (state) => ({
-        activeGrids: state.activeGrids,
+        // Don't persist grids - load from backend
+        currentConfig: state.currentConfig,
       }),
     }
   )

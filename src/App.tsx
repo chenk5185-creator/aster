@@ -17,6 +17,13 @@ function App() {
 
     // Load saved grids
     loadGrids();
+
+    // Auto-refresh grids every 5 seconds to sync with backend
+    const refreshInterval = setInterval(() => {
+      loadGrids();
+    }, 5000);
+
+    return () => clearInterval(refreshInterval);
   }, [loadSymbols, loadGrids]);
 
   // Subscribe to price updates when symbol changes
