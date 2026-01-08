@@ -28,23 +28,23 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
     setError('');
 
     if (!apiKey.trim()) {
-      setError('API Key is required');
+      setError('请输入 API Key');
       return;
     }
     if (!apiSecret.trim()) {
-      setError('API Secret is required');
+      setError('请输入 API Secret');
       return;
     }
     if (!password) {
-      setError('Password is required');
+      setError('请输入密码');
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError('密码至少需要 6 个字符');
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('两次输入的密码不一致');
       return;
     }
 
@@ -53,7 +53,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
       saveCredentials({ apiKey: apiKey.trim(), apiSecret: apiSecret.trim() }, password);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save credentials');
+      setError(e instanceof Error ? e.message : '保存凭证失败');
     } finally {
       setIsLoading(false);
     }
@@ -63,7 +63,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
     setError('');
 
     if (!password) {
-      setError('Password is required');
+      setError('请输入密码');
       return;
     }
 
@@ -73,10 +73,10 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
       if (success) {
         onClose();
       } else {
-        setError('Incorrect password');
+        setError('密码错误');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to unlock');
+      setError(e instanceof Error ? e.message : '解锁失败');
     } finally {
       setIsLoading(false);
     }
@@ -88,7 +88,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
   };
 
   const handleClear = () => {
-    if (confirm('Are you sure you want to clear all saved credentials?')) {
+    if (confirm('确定要清除所有保存的凭证吗？此操作无法撤销。')) {
       clearCredentials();
       setMode('setup');
       setApiKey('');
@@ -110,14 +110,14 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
   // If already unlocked, show lock/clear options
   if (isUnlocked) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="API Credentials" size="sm">
+      <Modal isOpen={isOpen} onClose={onClose} title="API 凭证" size="sm">
         <div className="space-y-6">
           <div className="flex items-center gap-3 p-4 bg-success/10 rounded-lg">
             <Shield className="h-8 w-8 text-success" />
             <div>
-              <div className="font-medium text-text-primary">Credentials Unlocked</div>
+              <div className="font-medium text-text-primary">凭证已解锁</div>
               <div className="text-sm text-text-secondary">
-                Your API credentials are active and ready to use.
+                您的 API 凭证已激活，可以开始使用。
               </div>
             </div>
           </div>
@@ -125,10 +125,10 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
           <div className="space-y-3">
             <Button variant="outline" onClick={handleLock} className="w-full">
               <Lock className="h-4 w-4 mr-2" />
-              Lock Credentials
+              锁定凭证
             </Button>
             <Button variant="ghost" onClick={handleClear} className="w-full text-error hover:bg-error/10">
-              Clear All Credentials
+              清除所有凭证
             </Button>
           </div>
         </div>
@@ -137,19 +137,19 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="API Credentials" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title="API 凭证" size="sm">
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Info Banner */}
         <div className="flex items-start gap-3 p-4 bg-primary/10 rounded-lg">
           <Key className="h-5 w-5 text-primary mt-0.5" />
           <div className="text-sm">
             <div className="font-medium text-text-primary mb-1">
-              {mode === 'setup' ? 'Setup API Credentials' : 'Unlock Credentials'}
+              {mode === 'setup' ? '配置 API 凭证' : '解锁凭证'}
             </div>
             <div className="text-text-secondary">
               {mode === 'setup'
-                ? 'Enter your ASTER API Key and Secret. They will be encrypted with your password.'
-                : 'Enter your password to unlock your saved credentials.'}
+                ? '输入您的 ASTER API Key 和 Secret，它们将使用您的密码进行加密存储。'
+                : '输入您的密码以解锁已保存的凭证。'}
             </div>
           </div>
         </div>
@@ -161,7 +161,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
               label="API Key"
               value={apiKey}
               onChange={setApiKey}
-              placeholder="Enter your API Key"
+              placeholder="输入您的 API Key"
               leftIcon={<Key className="h-4 w-4" />}
             />
 
@@ -172,7 +172,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
                 type={showSecret ? 'text' : 'password'}
                 value={apiSecret}
                 onChange={setApiSecret}
-                placeholder="Enter your API Secret"
+                placeholder="输入您的 API Secret"
                 leftIcon={<Shield className="h-4 w-4" />}
               />
               <button
@@ -189,11 +189,11 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
         {/* Password */}
         <div className="relative">
           <Input
-            label={mode === 'setup' ? 'Encryption Password' : 'Password'}
+            label={mode === 'setup' ? '加密密码' : '密码'}
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={setPassword}
-            placeholder="Enter password"
+            placeholder="输入密码"
             leftIcon={<Lock className="h-4 w-4" />}
           />
           <button
@@ -208,11 +208,11 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
         {/* Confirm Password (setup only) */}
         {mode === 'setup' && (
           <Input
-            label="Confirm Password"
+            label="确认密码"
             type="password"
             value={confirmPassword}
             onChange={setConfirmPassword}
-            placeholder="Confirm password"
+            placeholder="再次输入密码"
             leftIcon={<Lock className="h-4 w-4" />}
           />
         )}
@@ -228,7 +228,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
         {/* Actions */}
         <div className="flex gap-3">
           <Button type="submit" className="flex-1" isLoading={isLoading}>
-            {mode === 'setup' ? 'Save Credentials' : 'Unlock'}
+            {mode === 'setup' ? '保存凭证' : '解锁'}
           </Button>
         </div>
 
@@ -240,7 +240,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
               onClick={() => setMode('setup')}
               className="text-sm text-primary hover:underline"
             >
-              Setup new credentials instead
+              重新配置新凭证
             </button>
           </div>
         )}
