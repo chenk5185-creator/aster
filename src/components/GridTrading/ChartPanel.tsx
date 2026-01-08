@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useMarketStore } from '../../stores';
 import { marketApi } from '../../services/api';
 import { createChart } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, CandlestickData } from 'lightweight-charts';
+import type { IChartApi, CandlestickData } from 'lightweight-charts';
 import type { Kline } from '../../types';
 import { RefreshCw } from 'lucide-react';
 
@@ -19,7 +19,7 @@ export const ChartPanel: React.FC = () => {
   const { currentSymbol } = useMarketStore();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | any>(null);
+  const seriesRef = useRef<any>(null);
 
   const [interval, setInterval] = useState('15m');
   const [isLoading, setIsLoading] = useState(false);
@@ -83,7 +83,8 @@ export const ChartPanel: React.FC = () => {
       },
     });
 
-    const candlestickSeries = (chart as any).addCandlestickSeries({
+    // lightweight-charts v4 API
+    const candlestickSeries = chart.addCandlestickSeries({
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderVisible: false,
