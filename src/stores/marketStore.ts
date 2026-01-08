@@ -37,13 +37,28 @@ export const useMarketStore = create<MarketState>((set, get) => ({
     set({ isLoadingSymbols: true });
     try {
       const symbols = await marketApi.getSymbols();
-      // Filter to only USDT pairs for simplicity
-      const usdtSymbols = symbols.filter((s) => s.quoteAsset === 'USDT');
-      set({ symbols: usdtSymbols });
+      // 支持所有现货交易对，按计价货币排序：USDT > USDC > BTC > ETH > BNB > 其他
+      const quoteAssetOrder = ['USDT', 'USDC', 'BTC', 'ETH', 'BNB'];
+      const sortedSymbols = symbols.sort((a, b) => {
+        const orderA = quoteAssetOrder.indexOf(a.quoteAsset);
+        const orderB = quoteAssetOrder.indexOf(b.quoteAsset);
+
+        // 如果在排序列表中，按照列表顺序排序
+        if (orderA !== -1 && orderB !== -1) {
+          return orderA - orderB;
+        }
+        // 列表中的排在前面
+        if (orderA !== -1) return -1;
+        if (orderB !== -1) return 1;
+        // 都不在列表中，按字母顺序
+        return a.quoteAsset.localeCompare(b.quoteAsset);
+      });
+
+      set({ symbols: sortedSymbols });
 
       // Set default symbol info if current symbol exists
       const { currentSymbol } = get();
-      const symbolInfo = usdtSymbols.find((s) => s.symbol === currentSymbol);
+      const symbolInfo = sortedSymbols.find((s) => s.symbol === currentSymbol);
       if (symbolInfo) {
         set({ symbolInfo });
       }
