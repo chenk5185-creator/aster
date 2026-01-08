@@ -92,14 +92,23 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
                 </div>
                 <div className="flex items-center gap-2">
                   {grid.status === 'PENDING' && (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={(e) => handleStart(e, grid.id)}
-                    >
-                      <Play className="h-3 w-3 mr-1" />
-                      启动
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={(e) => handleStart(e, grid.id)}
+                      >
+                        <Play className="h-3 w-3 mr-1" />
+                        启动
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => handleRemove(e, grid.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </>
                   )}
                   {grid.status === 'RUNNING' && (
                     <Button

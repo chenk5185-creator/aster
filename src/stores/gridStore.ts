@@ -177,9 +177,10 @@ export const useGridStore = create<GridState>()(
         try {
           await manager.start();
 
-          // Update grid status
+          // Get updated instance from manager (includes RUNNING status)
+          const updatedInstance = manager.getInstance();
           const updatedGrids = activeGrids.map((g) =>
-            g.id === gridId ? { ...g, status: 'RUNNING' as GridStatus } : g
+            g.id === gridId ? updatedInstance : g
           );
           set({ activeGrids: updatedGrids });
         } catch (error) {
