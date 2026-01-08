@@ -1,5 +1,11 @@
-import axios, { AxiosInstance } from 'axios';
-import type { GridConfig, GridInstance, ApiResponse } from '../../types';
+import axios, { type AxiosInstance } from 'axios';
+import type { GridConfig, GridInstance } from '../../types';
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
