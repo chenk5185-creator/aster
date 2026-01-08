@@ -186,17 +186,45 @@ export class GridCalculator {
   }
 
   /**
-   * Adjust price to tick size
+   * Adjust price to tick size and format to correct precision
    */
   static adjustToTickSize(price: number, tickSize: number): number {
-    return Math.round(price / tickSize) * tickSize;
+    const adjusted = Math.round(price / tickSize) * tickSize;
+    // Format to correct decimal places to avoid floating point precision issues
+    const decimals = this.getDecimalPlacesFromNumber(tickSize);
+    return parseFloat(adjusted.toFixed(decimals));
   }
 
   /**
-   * Adjust quantity to step size (floor)
+   * Adjust quantity to step size (floor) and format to correct precision
    */
   static adjustToStepSize(quantity: number, stepSize: number): number {
-    return Math.floor(quantity / stepSize) * stepSize;
+    const adjusted = Math.floor(quantity / stepSize) * stepSize;
+    // Format to correct decimal places to avoid floating point precision issues
+    const decimals = this.getDecimalPlacesFromNumber(stepSize);
+    return parseFloat(adjusted.toFixed(decimals));
+  }
+
+  /**
+   * Get decimal places from a number (e.g., 0.01 => 2, 0.001 => 3)
+   */
+  private static getDecimalPlacesFromNumber(num: number): number {
+    if (num >= 1) return 0;
+    const str = num.toString();
+    const parts = str.split('.');
+    if (parts.length === 1) return 0;
+    // Count significant digits after decimal
+    const decimal = parts[1];
+    let count = 0;
+    for (let i = 0; i < decimal.length; i++) {
+      count++;
+      if (decimal[i] !== '0') break;
+    }
+    // Add remaining digits
+    for (let i = count; i < decimal.length; i++) {
+      if (decimal[i] !== '0') count = i + 1;
+    }
+    return count;
   }
 
   /**
