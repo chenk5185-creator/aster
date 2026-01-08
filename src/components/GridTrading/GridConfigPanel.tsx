@@ -106,8 +106,8 @@ export const GridConfigPanel: React.FC = () => {
   };
 
   const gridTypeOptions = [
-    { value: 'ARITHMETIC', label: 'Arithmetic (Equal Spacing)' },
-    { value: 'GEOMETRIC', label: 'Geometric (Equal Ratio)' },
+    { value: 'ARITHMETIC', label: '等差网格' },
+    { value: 'GEOMETRIC', label: '等比网格' },
   ];
 
   if (!isUnlocked) {
@@ -115,9 +115,9 @@ export const GridConfigPanel: React.FC = () => {
       <div className="card">
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <AlertTriangle className="h-12 w-12 text-warning mb-4" />
-          <h3 className="text-lg font-medium text-text-primary mb-2">API Credentials Required</h3>
+          <h3 className="text-lg font-medium text-text-primary mb-2">需要配置 API 凭证</h3>
           <p className="text-text-secondary text-sm">
-            Please configure your API credentials to start grid trading.
+            请先配置您的 API 凭证以开始网格交易。
           </p>
         </div>
       </div>
@@ -126,12 +126,12 @@ export const GridConfigPanel: React.FC = () => {
 
   return (
     <div className="card space-y-4">
-      <h2 className="text-lg font-semibold text-text-primary">Grid Configuration</h2>
+      <h2 className="text-lg font-semibold text-text-primary">网格配置</h2>
 
       {/* Price Range */}
       <div className="grid grid-cols-2 gap-3">
         <NumberInput
-          label="Upper Price"
+          label="价格上限"
           value={currentConfig.upperPrice || ''}
           onChange={(v) => setConfig({ upperPrice: v })}
           min={0}
@@ -140,7 +140,7 @@ export const GridConfigPanel: React.FC = () => {
           rightAddon={<span className="text-xs">USDT</span>}
         />
         <NumberInput
-          label="Lower Price"
+          label="价格下限"
           value={currentConfig.lowerPrice || ''}
           onChange={(v) => setConfig({ lowerPrice: v })}
           min={0}
@@ -155,7 +155,7 @@ export const GridConfigPanel: React.FC = () => {
         <div className="flex items-center gap-2 text-sm">
           <Info className="h-4 w-4 text-text-muted" />
           <span className="text-text-secondary">
-            Current price: <span className="text-text-primary font-medium">{formatNumber(price, 2)}</span> USDT
+            当前价格：<span className="text-text-primary font-medium">{formatNumber(price, 2)}</span> USDT
           </span>
         </div>
       )}
@@ -163,7 +163,7 @@ export const GridConfigPanel: React.FC = () => {
       {/* Grid Settings */}
       <div className="grid grid-cols-2 gap-3">
         <NumberInput
-          label="Grid Count"
+          label="网格数量"
           value={currentConfig.gridCount || ''}
           onChange={(v) => setConfig({ gridCount: Math.round(v) })}
           min={2}
@@ -172,7 +172,7 @@ export const GridConfigPanel: React.FC = () => {
           placeholder="10"
         />
         <Select
-          label="Grid Type"
+          label="网格类型"
           value={currentConfig.gridType || 'ARITHMETIC'}
           onValueChange={(v) => setConfig({ gridType: v as GridType })}
           options={gridTypeOptions}
@@ -181,35 +181,35 @@ export const GridConfigPanel: React.FC = () => {
 
       {/* Investment Amount */}
       <NumberInput
-        label="Investment Amount"
+        label="投资金额"
         value={currentConfig.investmentAmount || ''}
         onChange={(v) => setConfig({ investmentAmount: v })}
         min={0}
         step={1}
         placeholder="1000"
         rightAddon={<span className="text-xs">USDT</span>}
-        hint={`Available: ${formatNumber(balance, 2)} USDT`}
+        hint={`可用余额：${formatNumber(balance, 2)} USDT`}
       />
 
       {/* Grid Preview */}
       {gridPreview && (
         <div className="bg-surface-light rounded-lg p-3 space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">Buy Orders</span>
+            <span className="text-text-secondary">买入订单</span>
             <span className="text-primary">{gridPreview.buyGrids}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">Sell Orders</span>
-            <span className="text-text-muted">{gridPreview.sellGrids} (pending)</span>
+            <span className="text-text-secondary">卖出订单</span>
+            <span className="text-text-muted">{gridPreview.sellGrids} (待挂单)</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">Amount per Grid</span>
+            <span className="text-text-secondary">每格投资</span>
             <span className="text-text-primary">
               {formatNumber(gridPreview.amountPerGrid, 2)} USDT
             </span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-text-secondary">Est. Profit/Grid</span>
+            <span className="text-text-secondary">预估单格利润</span>
             <span className={gridPreview.profitStats.avgProfitRate > 0 ? 'text-success' : 'text-error'}>
               {formatPercent(gridPreview.profitStats.avgProfitRate)}
             </span>
@@ -224,44 +224,44 @@ export const GridConfigPanel: React.FC = () => {
           className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
         >
           {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          Advanced Settings
+          高级设置
         </button>
 
         {showAdvanced && (
           <div className="mt-3 space-y-3 pt-3 border-t border-border">
             <NumberInput
-              label="Trigger Price (Optional)"
+              label="触发价格（可选）"
               value={currentConfig.triggerPrice || ''}
               onChange={(v) => setConfig({ triggerPrice: v || undefined })}
               min={0}
               step={0.01}
-              placeholder="Grid starts when price reaches this"
+              placeholder="价格到达此价位时启动网格"
               rightAddon={<span className="text-xs">USDT</span>}
             />
 
             <div className="grid grid-cols-2 gap-3">
               <NumberInput
-                label="Stop Upper"
+                label="止损上限"
                 value={currentConfig.stopUpperPrice || ''}
                 onChange={(v) => setConfig({ stopUpperPrice: v || undefined })}
                 min={0}
                 step={0.01}
-                placeholder="Stop if price exceeds"
+                placeholder="价格超过时停止"
                 rightAddon={<span className="text-xs">USDT</span>}
               />
               <NumberInput
-                label="Stop Lower"
+                label="止损下限"
                 value={currentConfig.stopLowerPrice || ''}
                 onChange={(v) => setConfig({ stopLowerPrice: v || undefined })}
                 min={0}
                 step={0.01}
-                placeholder="Stop if price drops to"
+                placeholder="价格跌破时停止"
                 rightAddon={<span className="text-xs">USDT</span>}
               />
             </div>
 
             <div className="flex items-center justify-between py-2">
-              <label className="text-sm text-text-secondary">Cancel orders on stop</label>
+              <label className="text-sm text-text-secondary">停止时取消所有订单</label>
               <input
                 type="checkbox"
                 checked={currentConfig.cancelOrdersOnStop ?? true}
@@ -271,7 +271,7 @@ export const GridConfigPanel: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between py-2">
-              <label className="text-sm text-text-secondary">Sell all holdings on stop</label>
+              <label className="text-sm text-text-secondary">停止时卖出所有持仓</label>
               <input
                 type="checkbox"
                 checked={currentConfig.sellAllOnStop ?? false}
@@ -315,7 +315,7 @@ export const GridConfigPanel: React.FC = () => {
         isLoading={isCreating}
         className="w-full"
       >
-        Create Grid
+        创建网格
       </Button>
     </div>
   );

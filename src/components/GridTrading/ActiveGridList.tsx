@@ -17,10 +17,10 @@ const statusColors: Record<GridStatus, string> = {
 };
 
 const statusLabels: Record<GridStatus, string> = {
-  PENDING: 'Pending',
-  RUNNING: 'Running',
-  STOPPED: 'Stopped',
-  COMPLETED: 'Completed',
+  PENDING: '待启动',
+  RUNNING: '运行中',
+  STOPPED: '已停止',
+  COMPLETED: '已完成',
 };
 
 export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) => {
@@ -32,9 +32,9 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
       <div className="card">
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Grid3X3 className="h-12 w-12 text-text-muted mb-4" />
-          <h3 className="text-lg font-medium text-text-primary mb-2">No Active Grids</h3>
+          <h3 className="text-lg font-medium text-text-primary mb-2">暂无活跃网格</h3>
           <p className="text-text-secondary text-sm">
-            Create a new grid to start automated trading.
+            创建一个新网格来开始自动交易。
           </p>
         </div>
       </div>
@@ -61,14 +61,14 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
 
   const handleRemove = (e: React.MouseEvent, gridId: string) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to remove this grid?')) {
+    if (confirm('确定要删除这个网格吗？')) {
       removeGrid(gridId);
     }
   };
 
   return (
     <div className="card">
-      <h2 className="text-lg font-semibold text-text-primary mb-4">Active Grids</h2>
+      <h2 className="text-lg font-semibold text-text-primary mb-4">活跃网格</h2>
 
       <div className="space-y-3">
         {activeGrids.map((grid) => {
@@ -98,7 +98,7 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
                       onClick={(e) => handleStart(e, grid.id)}
                     >
                       <Play className="h-3 w-3 mr-1" />
-                      Start
+                      启动
                     </Button>
                   )}
                   {grid.status === 'RUNNING' && (
@@ -108,7 +108,7 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
                       onClick={(e) => handleStop(e, grid.id)}
                     >
                       <Square className="h-3 w-3 mr-1" />
-                      Stop
+                      停止
                     </Button>
                   )}
                   {(grid.status === 'STOPPED' || grid.status === 'COMPLETED') && (
@@ -126,25 +126,25 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
               {/* Grid Info */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div>
-                  <span className="text-text-muted block">Price Range</span>
+                  <span className="text-text-muted block">价格区间</span>
                   <span className="text-text-primary">
                     {formatNumber(grid.config.lowerPrice, 2)} - {formatNumber(grid.config.upperPrice, 2)}
                   </span>
                 </div>
                 <div>
-                  <span className="text-text-muted block">Grids</span>
+                  <span className="text-text-muted block">网格数</span>
                   <span className="text-text-primary">
-                    {grid.config.gridCount} ({grid.config.gridType.toLowerCase()})
+                    {grid.config.gridCount} ({grid.config.gridType === 'ARITHMETIC' ? '等差' : '等比'})
                   </span>
                 </div>
                 <div>
-                  <span className="text-text-muted block">Investment</span>
+                  <span className="text-text-muted block">投资金额</span>
                   <span className="text-text-primary">
                     {formatNumber(grid.config.investmentAmount, 2)} USDT
                   </span>
                 </div>
                 <div>
-                  <span className="text-text-muted block">Current Price</span>
+                  <span className="text-text-muted block">当前价格</span>
                   <span className="text-text-primary">
                     {currentPrice > 0 ? formatNumber(currentPrice, 2) : '-'}
                   </span>
@@ -164,7 +164,7 @@ export const ActiveGridList: React.FC<ActiveGridListProps> = ({ onSelectGrid }) 
                     </span>
                   </div>
                   <div className="text-text-muted text-sm">
-                    {grid.profit.tradingCount} trades
+                    {grid.profit.tradingCount} 笔交易
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-text-muted text-sm">

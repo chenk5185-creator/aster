@@ -18,8 +18,8 @@ export const Header: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Grid3X3 className="h-8 w-8 text-primary" />
                 <div>
-                  <h1 className="text-xl font-bold text-text-primary">ASTER Grid</h1>
-                  <p className="text-xs text-text-muted">Spot Trading</p>
+                  <h1 className="text-xl font-bold text-text-primary">ASTER 网格</h1>
+                  <p className="text-xs text-text-muted">现货交易</p>
                 </div>
               </div>
             </div>
@@ -40,17 +40,17 @@ export const Header: React.FC = () => {
                 {isUnlocked ? (
                   <>
                     <Unlock className="h-4 w-4 mr-2 text-success" />
-                    <span className="text-success">Connected</span>
+                    <span className="text-success">已连接</span>
                   </>
                 ) : hasCredentials ? (
                   <>
                     <Lock className="h-4 w-4 mr-2" />
-                    Unlock
+                    解锁
                   </>
                 ) : (
                   <>
                     <Key className="h-4 w-4 mr-2" />
-                    Setup API
+                    配置 API
                   </>
                 )}
               </Button>
