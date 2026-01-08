@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Header } from './components/Layout';
 import { GridConfigPanel, ActiveGridList, GridDetailModal, OrderBookPanel, ChartPanel } from './components/GridTrading';
-import { useMarketStore, useGridStore } from './stores';
+import { useMarketStore, useGridStore, useCredentialsStore } from './stores';
 import type { GridInstance } from './types';
 
 function App() {
   const { loadSymbols, currentSymbol, subscribeToPrice } = useMarketStore();
   const { loadGrids } = useGridStore();
+  const { isUnlocked } = useCredentialsStore();
 
   const [selectedGrid, setSelectedGrid] = useState<GridInstance | null>(null);
 
@@ -14,8 +15,13 @@ function App() {
   useEffect(() => {
     // Load symbols on mount
     loadSymbols();
+  }, [loadSymbols]);
 
-    // Load saved grids
+  // Load and refresh grids only when credentials are unlocked
+  useEffect(() => {
+    if (!isUnlocked) return;
+
+    // Load grids immediately
     loadGrids();
 
     // Auto-refresh grids every 5 seconds to sync with backend
@@ -24,7 +30,7 @@ function App() {
     }, 5000);
 
     return () => clearInterval(refreshInterval);
-  }, [loadSymbols, loadGrids]);
+  }, [isUnlocked, loadGrids]);
 
   // Subscribe to price updates when symbol changes
   useEffect(() => {
