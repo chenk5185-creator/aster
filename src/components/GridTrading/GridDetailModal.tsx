@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Button } from '../common';
 import { useGridStore, useMarketStore } from '../../stores';
-import { formatNumber, formatPercent, formatDateTime } from '../../utils/format';
+import { formatNumber, formatPercent, formatDateTime, formatSmartPrice } from '../../utils/format';
 import type { GridInstance, GridLevel } from '../../types';
 import { Play, Square, Trash2, ArrowDown, ArrowUp } from 'lucide-react';
 
@@ -47,7 +47,7 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
   };
 
   const handleRemove = () => {
-    if (confirm('Are you sure you want to remove this grid?')) {
+    if (confirm('确定要删除这个网格吗？此操作无法撤销。')) {
       removeGrid(grid.id);
       onClose();
     }
@@ -69,65 +69,75 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
   const getLevelStatusLabel = (level: GridLevel): string => {
     switch (level.status) {
       case 'BUY_PENDING':
-        return 'Buy Order';
+        return '买单挂单中';
       case 'HOLDING':
-        return 'Holding';
+        return '已持有';
       case 'SELL_PENDING':
-        return 'Sell Order';
+        return '卖单挂单中';
       default:
-        return 'Empty';
+        return '空仓';
+    }
+  };
+
+  const getStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'PENDING': return '待启动';
+      case 'RUNNING': return '运行中';
+      case 'STOPPED': return '已停止';
+      case 'COMPLETED': return '已完成';
+      default: return status;
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Grid: ${grid.config.symbol}`} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={`网格交易：${grid.config.symbol}`} size="lg">
       <div className="space-y-6">
         {/* Status Bar */}
         <div className="flex items-center justify-between p-4 bg-surface-light rounded-lg">
           <div>
-            <span className="text-text-muted text-sm">Status</span>
-            <div className="text-lg font-semibold text-text-primary">{grid.status}</div>
+            <span className="text-text-muted text-sm">状态</span>
+            <div className="text-lg font-semibold text-text-primary">{getStatusLabel(grid.status)}</div>
           </div>
           <div>
-            <span className="text-text-muted text-sm">Current Price</span>
+            <span className="text-text-muted text-sm">当前价格</span>
             <div className="text-lg font-semibold text-text-primary">
-              {currentPrice > 0 ? formatNumber(currentPrice, 2) : '-'} USDT
+              {currentPrice > 0 ? formatSmartPrice(currentPrice) : '-'} {grid.config.symbol.replace(/USDT|USDC|BTC|ETH|BNB/, (m) => m)}
             </div>
           </div>
           <div>
-            <span className="text-text-muted text-sm">Total Profit</span>
+            <span className="text-text-muted text-sm">总盈亏</span>
             <div className={`text-lg font-semibold ${profitColor}`}>
-              {formatNumber(grid.profit.totalProfit, 2)} USDT
+              {formatNumber(grid.profit.totalProfit, 4)} USDT
             </div>
           </div>
         </div>
 
         {/* Configuration */}
         <div>
-          <h3 className="text-sm font-medium text-text-secondary mb-3">Configuration</h3>
+          <h3 className="text-sm font-medium text-text-secondary mb-3">网格配置</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
-              <span className="text-text-muted text-sm block">Upper Price</span>
-              <span className="text-text-primary">{formatNumber(grid.config.upperPrice, 2)} USDT</span>
+              <span className="text-text-muted text-sm block">价格上限</span>
+              <span className="text-text-primary">{formatSmartPrice(grid.config.upperPrice)}</span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Lower Price</span>
-              <span className="text-text-primary">{formatNumber(grid.config.lowerPrice, 2)} USDT</span>
+              <span className="text-text-muted text-sm block">价格下限</span>
+              <span className="text-text-primary">{formatSmartPrice(grid.config.lowerPrice)}</span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Grid Count</span>
+              <span className="text-text-muted text-sm block">网格数量</span>
               <span className="text-text-primary">{grid.config.gridCount}</span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Grid Type</span>
-              <span className="text-text-primary">{grid.config.gridType}</span>
+              <span className="text-text-muted text-sm block">网格类型</span>
+              <span className="text-text-primary">{grid.config.gridType === 'ARITHMETIC' ? '等差' : '等比'}</span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Investment</span>
+              <span className="text-text-muted text-sm block">投资金额</span>
               <span className="text-text-primary">{formatNumber(grid.config.investmentAmount, 2)} USDT</span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Created</span>
+              <span className="text-text-muted text-sm block">创建时间</span>
               <span className="text-text-primary">{formatDateTime(grid.createdAt)}</span>
             </div>
           </div>
@@ -135,38 +145,38 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
 
         {/* Profit Statistics */}
         <div>
-          <h3 className="text-sm font-medium text-text-secondary mb-3">Profit Statistics</h3>
+          <h3 className="text-sm font-medium text-text-secondary mb-3">盈亏统计</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-surface-light rounded-lg">
             <div>
-              <span className="text-text-muted text-sm block">Realized Profit</span>
+              <span className="text-text-muted text-sm block">已实现盈亏</span>
               <span className={grid.profit.realizedProfit >= 0 ? 'text-success' : 'text-error'}>
                 {formatNumber(grid.profit.realizedProfit, 4)} USDT
               </span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Unrealized Profit</span>
+              <span className="text-text-muted text-sm block">未实现盈亏</span>
               <span className={grid.profit.unrealizedProfit >= 0 ? 'text-success' : 'text-error'}>
                 {formatNumber(grid.profit.unrealizedProfit, 4)} USDT
               </span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Profit Rate</span>
+              <span className="text-text-muted text-sm block">盈亏率</span>
               <span className={grid.profit.profitRate >= 0 ? 'text-success' : 'text-error'}>
                 {formatPercent(grid.profit.profitRate)}
               </span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Total Trades</span>
+              <span className="text-text-muted text-sm block">成交笔数</span>
               <span className="text-text-primary">{grid.profit.tradingCount}</span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Total Fees</span>
+              <span className="text-text-muted text-sm block">总手续费</span>
               <span className="text-text-primary">{formatNumber(grid.profit.totalFees, 4)} USDT</span>
             </div>
             <div>
-              <span className="text-text-muted text-sm block">Holdings</span>
+              <span className="text-text-muted text-sm block">持仓数量</span>
               <span className="text-text-primary">
-                {formatNumber(grid.baseAssetHolding, 6)} {grid.config.symbol.replace('USDT', '')}
+                {formatNumber(grid.baseAssetHolding, 6)} {grid.config.symbol.replace(/USDT|USDC|BTC|ETH|BNB/, '')}
               </span>
             </div>
           </div>
@@ -174,7 +184,7 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
 
         {/* Grid Levels */}
         <div>
-          <h3 className="text-sm font-medium text-text-secondary mb-3">Grid Levels</h3>
+          <h3 className="text-sm font-medium text-text-secondary mb-3">网格层级</h3>
           <div className="max-h-64 overflow-y-auto space-y-2">
             {grid.gridLevels
               .slice()
@@ -189,7 +199,7 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="text-text-muted text-xs">#{level.index + 1}</span>
                       <span className="text-text-primary font-mono">
-                        {formatNumber(level.price, 4)} USDT
+                        {formatSmartPrice(level.price)}
                       </span>
                       {isAbovePrice ? (
                         <ArrowUp className="h-3 w-3 text-success" />
@@ -224,7 +234,7 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
               className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
             />
             <label htmlFor="sellOnStop" className="text-sm text-text-secondary">
-              Sell all holdings when stopping
+              停止时卖出所有持仓
             </label>
           </div>
         )}
@@ -234,23 +244,23 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
           {grid.status === 'PENDING' && (
             <Button onClick={handleStart} isLoading={isLoading}>
               <Play className="h-4 w-4 mr-2" />
-              Start Grid
+              启动网格
             </Button>
           )}
           {grid.status === 'RUNNING' && (
             <Button variant="outline" onClick={handleStop} isLoading={isLoading}>
               <Square className="h-4 w-4 mr-2" />
-              Stop Grid
+              停止网格
             </Button>
           )}
           {(grid.status === 'STOPPED' || grid.status === 'COMPLETED') && (
             <Button variant="outline" onClick={handleRemove}>
               <Trash2 className="h-4 w-4 mr-2" />
-              Remove Grid
+              删除网格
             </Button>
           )}
           <Button variant="ghost" onClick={onClose}>
-            Close
+            关闭
           </Button>
         </div>
       </div>
