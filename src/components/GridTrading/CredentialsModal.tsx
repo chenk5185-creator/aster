@@ -50,7 +50,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
 
     setIsLoading(true);
     try {
-      saveCredentials({ apiKey: apiKey.trim(), apiSecret: apiSecret.trim() }, password);
+      await saveCredentials({ apiKey: apiKey.trim(), apiSecret: apiSecret.trim() }, password);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存凭证失败');
@@ -69,7 +69,7 @@ export const CredentialsModal: React.FC<CredentialsModalProps> = ({
 
     setIsLoading(true);
     try {
-      const success = unlockCredentials(password);
+      const success = await unlockCredentials(password);
       if (success) {
         onClose();
       } else {
