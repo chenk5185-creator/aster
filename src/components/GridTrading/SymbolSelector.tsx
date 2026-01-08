@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useMarketStore } from '../../stores';
-import { formatNumber } from '../../utils/format';
+import { formatSmartPrice } from '../../utils/format';
 import { Search, ChevronDown, Star, TrendingUp, TrendingDown } from 'lucide-react';
 
 interface SymbolSelectorProps {
@@ -113,7 +113,7 @@ export const SymbolSelector: React.FC<SymbolSelectorProps> = ({ onSymbolChange }
           {ticker && (
             <div className="flex items-center gap-2 text-sm">
               <span className="text-text-secondary">
-                {formatNumber(parseFloat(ticker.lastPrice), 2)}
+                {formatSmartPrice(parseFloat(ticker.lastPrice))}
               </span>
               <span className={`flex items-center gap-0.5 ${priceColor}`}>
                 <PriceIcon className="h-3 w-3" />

@@ -22,6 +22,37 @@ export function formatNumber(
 }
 
 /**
+ * 智能价格格式化：根据价格大小自动调整精度
+ * - 价格 >= 1000: 2位小数
+ * - 价格 >= 1: 2-4位小数
+ * - 价格 >= 0.01: 4位小数
+ * - 价格 >= 0.0001: 6位小数
+ * - 价格 < 0.0001: 8位小数
+ */
+export function formatSmartPrice(price: number): string {
+  if (price === 0) return '0';
+
+  const absPrice = Math.abs(price);
+  let decimals: number;
+
+  if (absPrice >= 1000) {
+    decimals = 2;
+  } else if (absPrice >= 1) {
+    decimals = 4;
+  } else if (absPrice >= 0.01) {
+    decimals = 4;
+  } else if (absPrice >= 0.0001) {
+    decimals = 6;
+  } else {
+    decimals = 8;
+  }
+
+  // 格式化并移除尾随的零
+  const formatted = price.toFixed(decimals);
+  return formatted.replace(/\.?0+$/, '');
+}
+
+/**
  * Format price according to tick size
  */
 export function formatPrice(price: number, tickSize: string): string {
