@@ -6,6 +6,7 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import gridRoutes from './routes/grid.js';
+import userRoutes from './routes/user.js';
 
 // Load environment variables
 config();
@@ -41,6 +42,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/user', userRoutes);
 app.use('/api/grids', gridRoutes);
 
 // Error handler
