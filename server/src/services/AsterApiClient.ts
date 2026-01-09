@@ -39,8 +39,21 @@ export class AsterApiClient {
       timeout: 30000,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'X-MBX-APIKEY': credentials.apiKey,
       },
+    });
+
+    // Add API key header dynamically using interceptor
+    // This allows public endpoints to work without API key if needed
+    this.axios.interceptors.request.use((config) => {
+      // Only add API key for authenticated endpoints
+      // Public endpoints like /api/v1/time don't need it
+      const publicEndpoints = ['/api/v1/time', '/api/v1/exchangeInfo', '/api/v1/ticker/price'];
+      const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
+
+      if (!isPublicEndpoint && this.credentials) {
+        config.headers['X-MBX-APIKEY'] = this.credentials.apiKey;
+      }
+      return config;
     });
   }
 
