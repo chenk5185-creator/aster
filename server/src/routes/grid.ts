@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import CryptoJS from 'crypto-js';
-import { gridQueries, userQueries } from '../database/db.js';
+import { gridQueries, userQueries, profitHistoryQueries } from '../database/db.js';
 import { AsterApiClient } from '../services/AsterApiClient.js';
 import { GridOrderManager } from '../services/GridOrderManager.js';
 import { GridCalculator } from '../services/GridCalculator.js';
@@ -145,7 +145,7 @@ router.post('/create', authMiddleware, async (req, res) => {
     });
 
     // Create manager (but don't start yet)
-    const manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+    const manager = new GridOrderManager(gridInstance, userId, symbolInfo, apiClient, fees);
     gridManagers.set(gridId, manager);
 
     res.json({ success: true, data: { gridId, grid: gridInstance } });
@@ -199,7 +199,7 @@ router.post('/:gridId/start', authMiddleware, async (req, res) => {
       const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
       const fees = await apiClient.getFeeRates();
 
-      manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+      manager = new GridOrderManager(gridInstance, userId, symbolInfo, apiClient, fees);
       gridManagers.set(gridId, manager);
     }
 
@@ -257,7 +257,7 @@ router.post('/:gridId/stop', authMiddleware, async (req, res) => {
       const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
       const fees = await apiClient.getFeeRates();
 
-      manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+      manager = new GridOrderManager(gridInstance, userId, symbolInfo, apiClient, fees);
       gridManagers.set(gridId, manager);
     }
 
@@ -309,7 +309,7 @@ router.delete('/:gridId', authMiddleware, async (req, res) => {
             const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
             const fees = await apiClient.getFeeRates();
 
-            manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+            manager = new GridOrderManager(gridInstance, userId, symbolInfo, apiClient, fees);
           } catch (error) {
             console.error(`[Error] Failed to recreate manager for deletion:`, error);
           }
@@ -378,7 +378,7 @@ async function restoreRunningGrids(userId: string, userPassword: string): Promis
         const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
         const fees = await apiClient.getFeeRates();
 
-        const manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+        const manager = new GridOrderManager(gridInstance, userId, symbolInfo, apiClient, fees);
 
         // Don't call start() - grid is already running on exchange
         // Just restore the manager to resume monitoring
@@ -491,6 +491,102 @@ router.get('/health', authMiddleware, async (req, res) => {
         healthyCount: healthStatus.filter(h => h.isHealthy).length,
         unhealthyCount: healthStatus.filter(h => !h.isHealthy).length,
         grids: healthStatus,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+/**
+ * GET /api/grids/:gridId/profit-history
+ * Get profit history for a specific grid
+ */
+router.get('/:gridId/profit-history', authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const { gridId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    // Check if grid exists and belongs to this user
+    const dbGrid = gridQueries.findById.get(gridId) as DbGrid | undefined;
+    if (!dbGrid) {
+      return res.status(404).json({ success: false, error: 'Grid not found' });
+    }
+
+    if (dbGrid.user_id !== userId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+
+    // Query profit history
+    let history: any[];
+    if (startDate && endDate) {
+      history = profitHistoryQueries.findByGridIdWithDateRange.all(
+        gridId,
+        parseInt(startDate as string),
+        parseInt(endDate as string)
+      ) as any[];
+    } else {
+      history = profitHistoryQueries.findByGridId.all(gridId) as any[];
+    }
+
+    res.json({
+      success: true,
+      data: {
+        gridId,
+        history,
+        totalRecords: history.length,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+/**
+ * GET /api/grids/user/profit-history
+ * Get all profit history for the current user
+ */
+router.get('/user/profit-history', authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const { startDate, endDate, limit } = req.query;
+
+    // Query profit history
+    let history: any[];
+    if (startDate && endDate) {
+      history = profitHistoryQueries.findByUserIdWithDateRange.all(
+        userId,
+        parseInt(startDate as string),
+        parseInt(endDate as string)
+      ) as any[];
+    } else {
+      history = profitHistoryQueries.findByUserId.all(userId) as any[];
+    }
+
+    // Apply limit if specified
+    if (limit) {
+      history = history.slice(0, parseInt(limit as string));
+    }
+
+    // Calculate summary statistics
+    const totalProfit = history.reduce((sum, record) => sum + record.profit, 0);
+    const totalFees = history.reduce((sum, record) => sum + record.fees, 0);
+    const totalTrades = history.length;
+
+    res.json({
+      success: true,
+      data: {
+        history,
+        summary: {
+          totalTrades,
+          totalProfit,
+          totalFees,
+          netProfit: totalProfit - totalFees,
+          averageProfit: totalTrades > 0 ? totalProfit / totalTrades : 0,
+        },
       },
     });
   } catch (error) {

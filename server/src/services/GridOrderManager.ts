@@ -8,7 +8,7 @@ import type {
 } from '../types/index.js';
 import { AsterApiClient } from './AsterApiClient.js';
 import { GridCalculator } from './GridCalculator.js';
-import { gridQueries } from '../database/db.js';
+import { gridQueries, profitHistoryQueries } from '../database/db.js';
 import { retryWithBackoff, Logger } from '../utils/retry.js';
 
 /**
@@ -17,6 +17,7 @@ import { retryWithBackoff, Logger } from '../utils/retry.js';
  */
 export class GridOrderManager {
   private gridInstance: GridInstance;
+  private userId: string;
   private apiClient: AsterApiClient;
   private tickSize: number;
   private stepSize: number;
@@ -28,14 +29,18 @@ export class GridOrderManager {
   private lastErrorTime: number | null = null;
   private errorCount: number = 0;
   private logger: Logger;
+  private reconciliationInterval: NodeJS.Timeout | null = null;
+  private lastReconciliationTime: number = 0;
 
   constructor(
     gridInstance: GridInstance,
+    userId: string,
     symbolInfo: SymbolInfo,
     apiClient: AsterApiClient,
     fees: { maker: number; taker: number }
   ) {
     this.gridInstance = gridInstance;
+    this.userId = userId;
     this.apiClient = apiClient;
     this.makerFee = fees.maker;
     this.takerFee = fees.taker;
@@ -94,6 +99,9 @@ export class GridOrderManager {
 
       // Start order monitoring
       this.startOrderPolling();
+
+      // Start reconciliation (every 10 minutes)
+      this.startReconciliation();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[Grid ${this.gridInstance.id}] Failed to start:`, message);
@@ -114,6 +122,7 @@ export class GridOrderManager {
     console.log(`[Grid ${this.gridInstance.id}] Stopping...`);
 
     this.stopOrderPolling();
+    this.stopReconciliation();
 
     try {
       // Cancel all open orders
@@ -278,12 +287,33 @@ export class GridOrderManager {
           this.takerFee
         );
 
+        // Calculate total fees for this trade
+        const tradeFees = (buyOrder.price + order.price) * order.quantity * this.makerFee;
+
         this.gridInstance.profit.realizedProfit += profit;
         this.gridInstance.profit.tradingCount += 1;
-        this.gridInstance.profit.totalFees +=
-          (buyOrder.price + order.price) * order.quantity * this.makerFee;
+        this.gridInstance.profit.totalFees += tradeFees;
 
         this.updateTotalProfit();
+
+        // Record to profit history
+        try {
+          profitHistoryQueries.create.run({
+            grid_id: this.gridInstance.id,
+            user_id: this.userId,
+            buy_order_id: buyOrder.orderId,
+            sell_order_id: order.orderId,
+            buy_price: buyOrder.price,
+            sell_price: order.price,
+            quantity: order.quantity,
+            profit: profit,
+            fees: tradeFees,
+            created_at: Date.now(),
+          });
+          this.logger.success(`Trade recorded: Profit ${profit.toFixed(4)} (Buy: ${buyOrder.price}, Sell: ${order.price}, Qty: ${order.quantity})`);
+        } catch (error) {
+          this.logger.error('Failed to record profit history', error);
+        }
 
         console.log(`[Grid ${this.gridInstance.id}] Trade completed. Profit: ${profit.toFixed(4)}`);
       }
@@ -500,7 +530,7 @@ export class GridOrderManager {
     try {
       gridQueries.update.run({
         id: this.gridInstance.id,
-        user_id: '', // Will be set by caller
+        user_id: this.userId,
         config: JSON.stringify(this.gridInstance.config),
         status: this.gridInstance.status,
         created_at: this.gridInstance.createdAt,
@@ -543,7 +573,105 @@ export class GridOrderManager {
     console.log(`[Grid ${this.gridInstance.id}] Resuming monitoring...`);
     this.isRunning = true;
     this.startOrderPolling();
+    this.startReconciliation();
     console.log(`[Grid ${this.gridInstance.id}] Monitoring resumed`);
+  }
+
+  /**
+   * Start periodic reconciliation
+   */
+  private startReconciliation(): void {
+    // Run every 10 minutes
+    this.reconciliationInterval = setInterval(() => {
+      this.reconcileOrders().catch((error) => {
+        this.logger.error('Reconciliation failed', error);
+      });
+    }, 600000); // 10 minutes
+
+    this.logger.info('Reconciliation started (10min interval)');
+  }
+
+  /**
+   * Stop reconciliation
+   */
+  private stopReconciliation(): void {
+    if (this.reconciliationInterval) {
+      clearInterval(this.reconciliationInterval);
+      this.reconciliationInterval = null;
+      this.logger.info('Reconciliation stopped');
+    }
+  }
+
+  /**
+   * Reconcile orders with exchange
+   * Compare database orders with actual exchange orders
+   */
+  private async reconcileOrders(): Promise<void> {
+    if (!this.isRunning) return;
+
+    this.logger.info('Starting order reconciliation...');
+    const startTime = Date.now();
+
+    try {
+      // Get all orders from exchange for this symbol
+      const exchangeOrders = await this.apiClient.getAllOrders(this.gridInstance.config.symbol);
+      const exchangeOrderMap = new Map(exchangeOrders.map(o => [o.orderId.toString(), o]));
+
+      let inconsistencies = 0;
+      let fixed = 0;
+
+      // Check each order in our database
+      for (const dbOrder of this.gridInstance.orders) {
+        const exchangeOrder = exchangeOrderMap.get(dbOrder.orderId);
+
+        if (!exchangeOrder) {
+          // Order not found on exchange - might be very old or deleted
+          if (dbOrder.status !== 'FILLED' && dbOrder.status !== 'CANCELED') {
+            this.logger.warn(`Order ${dbOrder.orderId} not found on exchange, marking as CANCELED`);
+            dbOrder.status = 'CANCELED';
+            inconsistencies++;
+            fixed++;
+          }
+          continue;
+        }
+
+        // Compare status
+        if (dbOrder.status !== exchangeOrder.status) {
+          this.logger.warn(
+            `Order ${dbOrder.orderId} status mismatch: DB=${dbOrder.status}, Exchange=${exchangeOrder.status}`
+          );
+
+          // Update to exchange status
+          dbOrder.status = exchangeOrder.status as any;
+          dbOrder.executedQty = parseFloat(exchangeOrder.executedQty);
+
+          if (exchangeOrder.status === 'FILLED' && !dbOrder.filledAt) {
+            dbOrder.filledAt = Date.now();
+            // Trigger order filled handling
+            await this.handleOrderFilled(dbOrder);
+          }
+
+          inconsistencies++;
+          fixed++;
+        }
+      }
+
+      // Save if we fixed anything
+      if (fixed > 0) {
+        this.saveToDatabase();
+      }
+
+      this.lastReconciliationTime = Date.now();
+      const duration = Date.now() - startTime;
+
+      if (inconsistencies > 0) {
+        this.logger.warn(`Reconciliation completed in ${duration}ms: Found ${inconsistencies} inconsistencies, fixed ${fixed}`);
+      } else {
+        this.logger.info(`Reconciliation completed in ${duration}ms: All orders in sync`);
+      }
+    } catch (error) {
+      this.logger.error('Reconciliation error', error);
+    }
   }
 
   /**

@@ -196,4 +196,10 @@ export class AsterApiClient {
     const response = await this.axios.get<Order[]>('/api/v1/openOrders', { params: signedParams });
     return response.data;
   }
+
+  async getAllOrders(symbol: string, limit: number = 500): Promise<Order[]> {
+    const signedParams = this.signParams({ symbol, limit });
+    const response = await this.axios.get<Order[]>('/api/v1/allOrders', { params: signedParams });
+    return response.data;
+  }
 }

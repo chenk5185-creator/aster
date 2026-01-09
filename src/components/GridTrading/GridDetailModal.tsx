@@ -4,6 +4,7 @@ import { useGridStore, useMarketStore } from '../../stores';
 import { formatNumber, formatPercent, formatDateTime, formatSmartPrice } from '../../utils/format';
 import type { GridInstance, GridLevel } from '../../types';
 import { Play, Square, Trash2, ArrowDown, ArrowUp } from 'lucide-react';
+import { ProfitHistoryChart } from './ProfitHistoryChart';
 
 interface GridDetailModalProps {
   grid: GridInstance;
@@ -192,6 +193,13 @@ export const GridDetailModal: React.FC<GridDetailModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Profit History Chart */}
+        {grid.profit.tradingCount > 0 && (
+          <div>
+            <ProfitHistoryChart gridId={grid.id} />
+          </div>
+        )}
 
         {/* Grid Levels */}
         <div>
