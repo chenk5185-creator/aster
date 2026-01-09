@@ -9,6 +9,7 @@ import type {
 import { AsterApiClient } from './AsterApiClient.js';
 import { GridCalculator } from './GridCalculator.js';
 import { gridQueries } from '../database/db.js';
+import { retryWithBackoff, Logger } from '../utils/retry.js';
 
 /**
  * Grid Order Manager (Backend Version)
@@ -26,6 +27,7 @@ export class GridOrderManager {
   private lastActivityTime: number = Date.now();
   private lastErrorTime: number | null = null;
   private errorCount: number = 0;
+  private logger: Logger;
 
   constructor(
     gridInstance: GridInstance,
@@ -37,6 +39,7 @@ export class GridOrderManager {
     this.apiClient = apiClient;
     this.makerFee = fees.maker;
     this.takerFee = fees.taker;
+    this.logger = new Logger(`Grid-${gridInstance.id}`);
 
     // Extract tick and step size from filters
     const priceFilter = symbolInfo.filters.find(
