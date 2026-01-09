@@ -151,6 +151,7 @@ router.post('/create', authMiddleware, async (req, res) => {
     res.json({ success: true, data: { gridId, grid: gridInstance } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Error] Failed to create grid:', error);
     res.status(500).json({ success: false, error: message });
   }
 });
@@ -174,6 +175,7 @@ router.post('/:gridId/start', authMiddleware, async (req, res) => {
     res.json({ success: true, data: { grid: manager.getInstance() } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[Error] Failed to start grid ${req.params.gridId}:`, error);
     res.status(500).json({ success: false, error: message });
   }
 });
@@ -198,6 +200,7 @@ router.post('/:gridId/stop', authMiddleware, async (req, res) => {
     res.json({ success: true, data: { grid: manager.getInstance() } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[Error] Failed to stop grid ${req.params.gridId}:`, error);
     res.status(500).json({ success: false, error: message });
   }
 });
