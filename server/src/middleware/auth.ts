@@ -5,7 +5,7 @@ import { userQueries } from '../database/db.js';
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'default-key-change-in-production';
 
 /**
- * Simple auth middleware - decrypts user credentials from header
+ * Simple auth middleware - extracts user credentials from header
  */
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -17,10 +17,10 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
   try {
     const token = authHeader.substring(7);
 
-    // Token format: userId:encryptedPassword
-    const [userId, encryptedPassword] = token.split(':');
+    // Token format: userId:password (password is plain text, transmitted over HTTPS)
+    const [userId, userPassword] = token.split(':');
 
-    if (!userId || !encryptedPassword) {
+    if (!userId || !userPassword) {
       return res.status(401).json({ success: false, error: 'Invalid token format' });
     }
 
@@ -30,18 +30,11 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
       return res.status(401).json({ success: false, error: 'User not found' });
     }
 
-    // Decrypt and verify password
-    try {
-      const decrypted = CryptoJS.AES.decrypt(encryptedPassword, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
+    // Attach user info to request
+    (req as any).userId = userId;
+    (req as any).userPassword = userPassword;
 
-      // Attach user to request
-      (req as any).userId = userId;
-      (req as any).userPassword = decrypted;
-
-      next();
-    } catch {
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
-    }
+    next();
   } catch (error) {
     return res.status(401).json({ success: false, error: 'Authentication failed' });
   }
