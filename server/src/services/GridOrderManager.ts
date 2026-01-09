@@ -23,6 +23,9 @@ export class GridOrderManager {
   private takerFee: number;
   private isRunning: boolean = false;
   private pollingInterval: NodeJS.Timeout | null = null;
+  private lastActivityTime: number = Date.now();
+  private lastErrorTime: number | null = null;
+  private errorCount: number = 0;
 
   constructor(
     gridInstance: GridInstance,
@@ -447,9 +450,20 @@ export class GridOrderManager {
 
       // Check stop conditions
       await this.checkStopConditions();
+
+      // Update activity time on successful check
+      this.lastActivityTime = Date.now();
+      this.errorCount = 0; // Reset error count on success
     } catch (error) {
-      // Don't throw - just log and continue
-      console.error(`[Grid ${this.gridInstance.id}] Error in checkOrderUpdates:`, error);
+      // Track errors for health monitoring
+      this.lastErrorTime = Date.now();
+      this.errorCount++;
+      console.error(`[Grid ${this.gridInstance.id}] Error in checkOrderUpdates (count: ${this.errorCount}):`, error);
+
+      // If too many consecutive errors, log warning
+      if (this.errorCount >= 5) {
+        console.error(`[Grid ${this.gridInstance.id}] ⚠️ HIGH ERROR COUNT: ${this.errorCount} consecutive errors`);
+      }
     }
   }
 
@@ -511,5 +525,63 @@ export class GridOrderManager {
    */
   getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * Resume monitoring for a recovered grid
+   * Used when restoring grids after backend restart
+   */
+  resumeMonitoring(): void {
+    if (this.isRunning) {
+      console.log(`[Grid ${this.gridInstance.id}] Already monitoring`);
+      return;
+    }
+
+    console.log(`[Grid ${this.gridInstance.id}] Resuming monitoring...`);
+    this.isRunning = true;
+    this.startOrderPolling();
+    console.log(`[Grid ${this.gridInstance.id}] Monitoring resumed`);
+  }
+
+  /**
+   * Get health status of this grid
+   */
+  getHealthStatus(): {
+    isHealthy: boolean;
+    lastActivityTime: number;
+    lastErrorTime: number | null;
+    errorCount: number;
+    timeSinceActivity: number;
+    warnings: string[];
+  } {
+    const now = Date.now();
+    const timeSinceActivity = now - this.lastActivityTime;
+    const warnings: string[] = [];
+
+    // Check if activity is stale (no updates for 1 minute)
+    if (this.isRunning && timeSinceActivity > 60000) {
+      warnings.push(`No activity for ${Math.floor(timeSinceActivity / 1000)}s`);
+    }
+
+    // Check error count
+    if (this.errorCount > 0) {
+      warnings.push(`${this.errorCount} consecutive errors`);
+    }
+
+    // Check if error count is critical
+    if (this.errorCount >= 10) {
+      warnings.push('⚠️ CRITICAL: Too many errors');
+    }
+
+    const isHealthy = warnings.length === 0 || (this.errorCount < 5 && timeSinceActivity < 120000);
+
+    return {
+      isHealthy,
+      lastActivityTime: this.lastActivityTime,
+      lastErrorTime: this.lastErrorTime,
+      errorCount: this.errorCount,
+      timeSinceActivity,
+      warnings,
+    };
   }
 }
