@@ -99,7 +99,8 @@ export class GridOrderManager {
    * Stop the grid
    */
   async stop(sellHoldings: boolean = false): Promise<void> {
-    if (!this.isRunning) {
+    // Check if already stopped based on instance status, not just isRunning flag
+    if (this.gridInstance.status === 'STOPPED') {
       console.log(`[Grid ${this.gridInstance.id}] Already stopped`);
       return;
     }
