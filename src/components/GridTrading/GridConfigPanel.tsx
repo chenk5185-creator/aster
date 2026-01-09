@@ -14,10 +14,11 @@ export const GridConfigPanel: React.FC = () => {
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [balance, setBalance] = useState(0);
-  const [feeRate, setFeeRate] = useState(0.001);
-  const [fees, setFees] = useState<{ maker: number; taker: number } | null>(null);
+  // Fixed MAKER fee rate: 0.05% = 0.0005
+  const feeRate = 0.0005;
+  const fees = { maker: 0.0005, taker: 0.0005 };
 
-  // Load balance and fee rate
+  // Load balance
   useEffect(() => {
     if (!isUnlocked || !symbolInfo) return;
 
@@ -25,10 +26,6 @@ export const GridConfigPanel: React.FC = () => {
       try {
         const bal = await accountApi.getAvailableBalance(symbolInfo.quoteAsset);
         setBalance(bal);
-
-        const feeRates = await accountApi.getFeeRates();
-        setFees(feeRates);
-        setFeeRate(feeRates.maker);
       } catch (e) {
         console.error('Failed to load account data:', e);
       }
@@ -134,7 +131,7 @@ export const GridConfigPanel: React.FC = () => {
       <div className="grid grid-cols-2 gap-3">
         <NumberInput
           label="价格上限"
-          value={currentConfig.upperPrice || ''}
+          value={currentConfig.upperPrice ?? ''}
           onChange={(v) => setConfig({ upperPrice: v })}
           min={0}
           step={0.01}
@@ -143,7 +140,7 @@ export const GridConfigPanel: React.FC = () => {
         />
         <NumberInput
           label="价格下限"
-          value={currentConfig.lowerPrice || ''}
+          value={currentConfig.lowerPrice ?? ''}
           onChange={(v) => setConfig({ lowerPrice: v })}
           min={0}
           step={0.01}
@@ -166,7 +163,7 @@ export const GridConfigPanel: React.FC = () => {
       <div className="grid grid-cols-2 gap-3">
         <NumberInput
           label="网格数量"
-          value={currentConfig.gridCount || ''}
+          value={currentConfig.gridCount ?? ''}
           onChange={(v) => setConfig({ gridCount: Math.round(v) })}
           min={2}
           max={200}
@@ -184,7 +181,7 @@ export const GridConfigPanel: React.FC = () => {
       {/* Investment Amount */}
       <NumberInput
         label="投资金额"
-        value={currentConfig.investmentAmount || ''}
+        value={currentConfig.investmentAmount ?? ''}
         onChange={(v) => setConfig({ investmentAmount: v })}
         min={0}
         step={1}
@@ -251,7 +248,7 @@ export const GridConfigPanel: React.FC = () => {
           <div className="mt-3 space-y-3 pt-3 border-t border-border">
             <NumberInput
               label="触发价格（可选）"
-              value={currentConfig.triggerPrice || ''}
+              value={currentConfig.triggerPrice ?? ''}
               onChange={(v) => setConfig({ triggerPrice: v || undefined })}
               min={0}
               step={0.01}
@@ -262,7 +259,7 @@ export const GridConfigPanel: React.FC = () => {
             <div className="grid grid-cols-2 gap-3">
               <NumberInput
                 label="止损上限"
-                value={currentConfig.stopUpperPrice || ''}
+                value={currentConfig.stopUpperPrice ?? ''}
                 onChange={(v) => setConfig({ stopUpperPrice: v || undefined })}
                 min={0}
                 step={0.01}
@@ -271,7 +268,7 @@ export const GridConfigPanel: React.FC = () => {
               />
               <NumberInput
                 label="止损下限"
-                value={currentConfig.stopLowerPrice || ''}
+                value={currentConfig.stopLowerPrice ?? ''}
                 onChange={(v) => setConfig({ stopLowerPrice: v || undefined })}
                 min={0}
                 step={0.01}
