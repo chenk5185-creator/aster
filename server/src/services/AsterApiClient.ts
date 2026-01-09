@@ -37,22 +37,24 @@ export class AsterApiClient {
     this.axios = axios.create({
       baseURL: BASE_URL,
       timeout: 30000,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      // Remove global Content-Type header - it should only be set for POST requests
     });
 
-    // Add API key header dynamically using interceptor
-    // This allows public endpoints to work without API key if needed
+    // Add headers dynamically using interceptor
     this.axios.interceptors.request.use((config) => {
-      // Only add API key for authenticated endpoints
-      // Public endpoints like /api/v1/time don't need it
+      // Public endpoints don't need API key
       const publicEndpoints = ['/api/v1/time', '/api/v1/exchangeInfo', '/api/v1/ticker/price'];
       const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
 
       if (!isPublicEndpoint && this.credentials) {
         config.headers['X-MBX-APIKEY'] = this.credentials.apiKey;
       }
+
+      // Only add Content-Type for POST requests
+      if (config.method?.toUpperCase() === 'POST') {
+        config.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      }
+
       return config;
     });
   }
