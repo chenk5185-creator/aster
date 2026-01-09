@@ -178,6 +178,22 @@ export const useCredentialsStore = create<CredentialsState>()(
         // Set backend credentials
         if (userId) {
           backendApi.setCredentials(userId, password);
+        } else {
+          // Legacy data without userId - auto-sync to backend
+          try {
+            console.log('Migrating legacy credentials to backend...');
+            const newUserId = await backendApi.setupUser(
+              credentials.apiKey,
+              credentials.apiSecret,
+              password
+            );
+            backendApi.setCredentials(newUserId, password);
+            set({ userId: newUserId });
+            console.log('Legacy credentials migrated successfully');
+          } catch (error) {
+            console.error('Failed to migrate legacy credentials to backend:', error);
+            // Continue anyway - at least local API calls will work
+          }
         }
 
         set({ isUnlocked: true });
