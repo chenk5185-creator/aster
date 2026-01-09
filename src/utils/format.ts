@@ -2,10 +2,14 @@
  * Format number to fixed decimal places
  */
 export function formatNumber(
-  value: number,
+  value: number | null | undefined,
   decimals: number = 2,
   minDecimals?: number
 ): string {
+  if (value === null || value === undefined || isNaN(value)) {
+    return '0';
+  }
+
   const formatted = value.toFixed(decimals);
   if (minDecimals !== undefined && minDecimals < decimals) {
     // Remove trailing zeros but keep at least minDecimals
@@ -29,8 +33,10 @@ export function formatNumber(
  * - 价格 >= 0.0001: 6位小数
  * - 价格 < 0.0001: 8位小数
  */
-export function formatSmartPrice(price: number): string {
-  if (price === 0) return '0';
+export function formatSmartPrice(price: number | null | undefined): string {
+  if (price === null || price === undefined || isNaN(price) || price === 0) {
+    return '0';
+  }
 
   const absPrice = Math.abs(price);
   let decimals: number;
@@ -55,7 +61,10 @@ export function formatSmartPrice(price: number): string {
 /**
  * Format price according to tick size
  */
-export function formatPrice(price: number, tickSize: string): string {
+export function formatPrice(price: number | null | undefined, tickSize: string): string {
+  if (price === null || price === undefined || isNaN(price)) {
+    return '0';
+  }
   const precision = getDecimalPlaces(tickSize);
   return price.toFixed(precision);
 }
@@ -63,7 +72,10 @@ export function formatPrice(price: number, tickSize: string): string {
 /**
  * Format quantity according to step size
  */
-export function formatQuantity(quantity: number, stepSize: string): string {
+export function formatQuantity(quantity: number | null | undefined, stepSize: string): string {
+  if (quantity === null || quantity === undefined || isNaN(quantity)) {
+    return '0';
+  }
   const precision = getDecimalPlaces(stepSize);
   return quantity.toFixed(precision);
 }
@@ -89,10 +101,13 @@ export function getDecimalPlaces(stepSize: string): number {
  * Format currency with symbol
  */
 export function formatCurrency(
-  value: number,
+  value: number | null | undefined,
   currency: string = 'USDT',
   decimals: number = 2
 ): string {
+  if (value === null || value === undefined || isNaN(value)) {
+    return `0 ${currency}`;
+  }
   const formatted = formatNumber(Math.abs(value), decimals);
   const sign = value < 0 ? '-' : value > 0 ? '+' : '';
   return `${sign}${formatted} ${currency}`;
@@ -101,7 +116,10 @@ export function formatCurrency(
 /**
  * Format percentage
  */
-export function formatPercent(value: number, decimals: number = 2): string {
+export function formatPercent(value: number | null | undefined, decimals: number = 2): string {
+  if (value === null || value === undefined || isNaN(value)) {
+    return '0%';
+  }
   const formatted = formatNumber(Math.abs(value), decimals);
   const sign = value < 0 ? '-' : value > 0 ? '+' : '';
   return `${sign}${formatted}%`;
@@ -110,7 +128,10 @@ export function formatPercent(value: number, decimals: number = 2): string {
 /**
  * Format large numbers with K, M, B suffixes
  */
-export function formatCompact(value: number): string {
+export function formatCompact(value: number | null | undefined): string {
+  if (value === null || value === undefined || isNaN(value)) {
+    return '0';
+  }
   if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
   if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
   if (value >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
