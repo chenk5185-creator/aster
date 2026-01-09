@@ -15,6 +15,7 @@ export const GridConfigPanel: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [balance, setBalance] = useState(0);
   const [feeRate, setFeeRate] = useState(0.001);
+  const [fees, setFees] = useState<{ maker: number; taker: number } | null>(null);
 
   // Load balance and fee rate
   useEffect(() => {
@@ -25,8 +26,9 @@ export const GridConfigPanel: React.FC = () => {
         const bal = await accountApi.getAvailableBalance(symbolInfo.quoteAsset);
         setBalance(bal);
 
-        const fees = await accountApi.getFeeRates();
-        setFeeRate(fees.maker);
+        const feeRates = await accountApi.getFeeRates();
+        setFees(feeRates);
+        setFeeRate(feeRates.maker);
       } catch (e) {
         console.error('Failed to load account data:', e);
       }
@@ -190,6 +192,24 @@ export const GridConfigPanel: React.FC = () => {
         rightAddon={<span className="text-xs">USDT</span>}
         hint={`可用余额：${formatNumber(balance, 2)} USDT`}
       />
+
+      {/* Fee Rates Info */}
+      {fees && (
+        <div className="bg-surface-light rounded-lg p-3 space-y-2">
+          <div className="flex items-center gap-2 mb-2">
+            <Info className="h-4 w-4 text-text-muted" />
+            <span className="text-sm font-medium text-text-primary">交易费率</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-text-secondary">Maker 费率（挂单）</span>
+            <span className="text-text-primary font-medium">{formatPercent(fees.maker * 100)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-text-secondary">Taker 费率（吃单）</span>
+            <span className="text-text-primary font-medium">{formatPercent(fees.taker * 100)}</span>
+          </div>
+        </div>
+      )}
 
       {/* Grid Preview */}
       {gridPreview && (
