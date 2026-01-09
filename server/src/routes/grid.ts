@@ -163,11 +163,44 @@ router.post('/create', authMiddleware, async (req, res) => {
 router.post('/:gridId/start', authMiddleware, async (req, res) => {
   try {
     const userId = (req as any).userId;
+    const userPassword = (req as any).userPassword;
     const { gridId } = req.params;
 
-    const manager = gridManagers.get(gridId);
+    let manager = gridManagers.get(gridId);
+
+    // If manager doesn't exist, try to recreate it from database
     if (!manager) {
-      return res.status(404).json({ success: false, error: 'Grid manager not found' });
+      const dbGrid = gridQueries.findById.get(gridId) as DbGrid | undefined;
+      if (!dbGrid) {
+        return res.status(404).json({ success: false, error: 'Grid not found' });
+      }
+
+      // Check if grid belongs to this user
+      if (dbGrid.user_id !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized' });
+      }
+
+      // Get user credentials
+      const user = userQueries.findById.get(userId) as any;
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      const credentials = decryptCredentials(user.encrypted_credentials as string, userPassword);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: 'Failed to decrypt credentials' });
+      }
+
+      // Recreate manager
+      const apiClient = new AsterApiClient(credentials);
+      await apiClient.syncServerTime();
+
+      const gridInstance = dbGridToInstance(dbGrid);
+      const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
+      const fees = await apiClient.getFeeRates();
+
+      manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+      gridManagers.set(gridId, manager);
     }
 
     await manager.start();
@@ -187,12 +220,45 @@ router.post('/:gridId/start', authMiddleware, async (req, res) => {
 router.post('/:gridId/stop', authMiddleware, async (req, res) => {
   try {
     const userId = (req as any).userId;
+    const userPassword = (req as any).userPassword;
     const { gridId } = req.params;
     const { sellHoldings } = req.body;
 
-    const manager = gridManagers.get(gridId);
+    let manager = gridManagers.get(gridId);
+
+    // If manager doesn't exist, try to recreate it from database
     if (!manager) {
-      return res.status(404).json({ success: false, error: 'Grid manager not found' });
+      const dbGrid = gridQueries.findById.get(gridId) as DbGrid | undefined;
+      if (!dbGrid) {
+        return res.status(404).json({ success: false, error: 'Grid not found' });
+      }
+
+      // Check if grid belongs to this user
+      if (dbGrid.user_id !== userId) {
+        return res.status(403).json({ success: false, error: 'Unauthorized' });
+      }
+
+      // Get user credentials
+      const user = userQueries.findById.get(userId) as any;
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      const credentials = decryptCredentials(user.encrypted_credentials as string, userPassword);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: 'Failed to decrypt credentials' });
+      }
+
+      // Recreate manager
+      const apiClient = new AsterApiClient(credentials);
+      await apiClient.syncServerTime();
+
+      const gridInstance = dbGridToInstance(dbGrid);
+      const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
+      const fees = await apiClient.getFeeRates();
+
+      manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+      gridManagers.set(gridId, manager);
     }
 
     await manager.stop(sellHoldings || false);
@@ -212,10 +278,46 @@ router.post('/:gridId/stop', authMiddleware, async (req, res) => {
 router.delete('/:gridId', authMiddleware, async (req, res) => {
   try {
     const userId = (req as any).userId;
+    const userPassword = (req as any).userPassword;
     const { gridId } = req.params;
 
+    // Check if grid exists in database
+    const dbGrid = gridQueries.findById.get(gridId) as DbGrid | undefined;
+    if (!dbGrid) {
+      return res.status(404).json({ success: false, error: 'Grid not found' });
+    }
+
+    // Check if grid belongs to this user
+    if (dbGrid.user_id !== userId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+
+    let manager = gridManagers.get(gridId);
+
+    // If grid is running but manager doesn't exist, recreate it
+    if (!manager && dbGrid.status === 'RUNNING') {
+      // Get user credentials
+      const user = userQueries.findById.get(userId) as any;
+      if (user) {
+        const credentials = decryptCredentials(user.encrypted_credentials as string, userPassword);
+        if (credentials) {
+          try {
+            const apiClient = new AsterApiClient(credentials);
+            await apiClient.syncServerTime();
+
+            const gridInstance = dbGridToInstance(dbGrid);
+            const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
+            const fees = await apiClient.getFeeRates();
+
+            manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+          } catch (error) {
+            console.error(`[Error] Failed to recreate manager for deletion:`, error);
+          }
+        }
+      }
+    }
+
     // Stop manager if running
-    const manager = gridManagers.get(gridId);
     if (manager && manager.getIsRunning()) {
       await manager.stop();
     }
