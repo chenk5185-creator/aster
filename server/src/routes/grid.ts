@@ -334,12 +334,80 @@ router.delete('/:gridId', authMiddleware, async (req, res) => {
 });
 
 /**
+ * Helper: Restore running grids for a user
+ */
+async function restoreRunningGrids(userId: string, userPassword: string): Promise<void> {
+  try {
+    // Get all RUNNING grids for this user
+    const dbGrids = gridQueries.findByUserId.all(userId) as DbGrid[];
+    const runningGrids = dbGrids.filter(g => g.status === 'RUNNING');
+
+    if (runningGrids.length === 0) {
+      return;
+    }
+
+    console.log(`[Recovery] Found ${runningGrids.length} running grids for user ${userId}`);
+
+    // Get user credentials
+    const user = userQueries.findById.get(userId) as any;
+    if (!user) {
+      console.error(`[Recovery] User ${userId} not found`);
+      return;
+    }
+
+    const credentials = decryptCredentials(user.encrypted_credentials as string, userPassword);
+    if (!credentials) {
+      console.error(`[Recovery] Failed to decrypt credentials for user ${userId}`);
+      return;
+    }
+
+    // Create API client
+    const apiClient = new AsterApiClient(credentials);
+    await apiClient.syncServerTime();
+
+    // Restore each grid
+    for (const dbGrid of runningGrids) {
+      try {
+        // Skip if manager already exists
+        if (gridManagers.has(dbGrid.id)) {
+          console.log(`[Recovery] Grid ${dbGrid.id} manager already exists, skipping`);
+          continue;
+        }
+
+        const gridInstance = dbGridToInstance(dbGrid);
+        const symbolInfo = await apiClient.getSymbolInfo(gridInstance.config.symbol);
+        const fees = await apiClient.getFeeRates();
+
+        const manager = new GridOrderManager(gridInstance, symbolInfo, apiClient, fees);
+
+        // Don't call start() - grid is already running on exchange
+        // Just restore the manager to resume monitoring
+        manager.resumeMonitoring();
+
+        gridManagers.set(dbGrid.id, manager);
+        console.log(`[Recovery] Grid ${dbGrid.id} restored and monitoring resumed`);
+      } catch (error) {
+        console.error(`[Recovery] Failed to restore grid ${dbGrid.id}:`, error);
+      }
+    }
+
+    console.log(`[Recovery] Restored ${runningGrids.length} running grids for user ${userId}`);
+  } catch (error) {
+    console.error(`[Recovery] Error restoring grids for user ${userId}:`, error);
+  }
+}
+
+/**
  * GET /api/grids
- * Get all grids for user
+ * Get all grids for user (and auto-restore running grids)
  */
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const userId = (req as any).userId;
+    const userPassword = (req as any).userPassword;
+
+    // Auto-restore running grids on first access
+    await restoreRunningGrids(userId, userPassword);
 
     const dbGrids = gridQueries.findByUserId.all(userId) as DbGrid[];
     const grids = dbGrids.map(dbGridToInstance);
@@ -373,6 +441,58 @@ router.get('/:gridId', authMiddleware, async (req, res) => {
 
     const grid = dbGridToInstance(dbGrid);
     res.json({ success: true, data: { grid } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+/**
+ * GET /api/grids/health
+ * Get health status of all running grids
+ */
+router.get('/health', authMiddleware, async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+
+    // Get all grids for this user
+    const dbGrids = gridQueries.findByUserId.all(userId) as DbGrid[];
+    const runningGrids = dbGrids.filter(g => g.status === 'RUNNING');
+
+    const healthStatus = runningGrids.map(dbGrid => {
+      const manager = gridManagers.get(dbGrid.id);
+
+      if (!manager) {
+        return {
+          gridId: dbGrid.id,
+          isHealthy: false,
+          warnings: ['Manager not found in memory'],
+          lastActivityTime: null,
+          lastErrorTime: null,
+          errorCount: 0,
+          timeSinceActivity: null,
+        };
+      }
+
+      const health = manager.getHealthStatus();
+      return {
+        gridId: dbGrid.id,
+        ...health,
+      };
+    });
+
+    const overallHealthy = healthStatus.every(h => h.isHealthy);
+
+    res.json({
+      success: true,
+      data: {
+        overallHealthy,
+        gridCount: runningGrids.length,
+        healthyCount: healthStatus.filter(h => h.isHealthy).length,
+        unhealthyCount: healthStatus.filter(h => !h.isHealthy).length,
+        grids: healthStatus,
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ success: false, error: message });
