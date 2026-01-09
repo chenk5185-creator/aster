@@ -175,25 +175,37 @@ export const useCredentialsStore = create<CredentialsState>()(
         unlockedCredentials = credentials;
         apiClient.setCredentials(credentials);
 
-        // Set backend credentials
+        // Try to use existing userId if available
         if (userId) {
           backendApi.setCredentials(userId, password);
-        } else {
-          // Legacy data without userId - auto-sync to backend
+
+          // Verify userId is valid by testing backend connection
           try {
-            console.log('Migrating legacy credentials to backend...');
-            const newUserId = await backendApi.setupUser(
-              credentials.apiKey,
-              credentials.apiSecret,
-              password
-            );
-            backendApi.setCredentials(newUserId, password);
-            set({ userId: newUserId });
-            console.log('Legacy credentials migrated successfully');
+            await backendApi.getGrids();
+            // Success - userId is valid
+            set({ isUnlocked: true });
+            return true;
           } catch (error) {
-            console.error('Failed to migrate legacy credentials to backend:', error);
-            // Continue anyway - at least local API calls will work
+            // Failed - userId might be invalid, try to re-migrate
+            console.warn('Existing userId failed, attempting re-migration...');
           }
+        }
+
+        // No userId or userId is invalid - migrate credentials to backend
+        try {
+          console.log('Migrating legacy credentials to backend...');
+          const newUserId = await backendApi.setupUser(
+            credentials.apiKey,
+            credentials.apiSecret,
+            password,
+            userId || undefined
+          );
+          backendApi.setCredentials(newUserId, password);
+          set({ userId: newUserId });
+          console.log('Legacy credentials migrated successfully');
+        } catch (error) {
+          console.error('Failed to migrate legacy credentials to backend:', error);
+          // Continue anyway - at least local API calls will work
         }
 
         set({ isUnlocked: true });
