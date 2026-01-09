@@ -182,6 +182,47 @@ class BackendApiClient {
       throw new Error(response.data.error || 'Failed to delete grid');
     }
   }
+
+  /**
+   * Get profit history for a specific grid
+   */
+  async getGridProfitHistory(
+    gridId: string,
+    startDate?: number,
+    endDate?: number
+  ): Promise<ProfitHistoryRecord[]> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate.toString());
+    if (endDate) params.append('endDate', endDate.toString());
+
+    const response = await this.axios.get<
+      ApiResponse<{ history: ProfitHistoryRecord[]; totalRecords: number }>
+    >(`/api/grids/${gridId}/profit-history${params.toString() ? `?${params}` : ''}`, {
+      headers: {
+        Authorization: this.getAuthHeader(),
+      },
+    });
+
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Failed to get profit history');
+    }
+
+    return response.data.data.history;
+  }
+}
+
+export interface ProfitHistoryRecord {
+  id: number;
+  grid_id: string;
+  user_id: string;
+  buy_order_id: string;
+  sell_order_id: string;
+  buy_price: number;
+  sell_price: number;
+  quantity: number;
+  profit: number;
+  fees: number;
+  created_at: number;
 }
 
 export const backendApi = new BackendApiClient();

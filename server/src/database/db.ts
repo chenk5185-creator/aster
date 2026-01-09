@@ -52,10 +52,32 @@ function initDatabase() {
     )
   `);
 
+  // Profit history table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS profit_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      grid_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      buy_order_id TEXT NOT NULL,
+      sell_order_id TEXT NOT NULL,
+      buy_price REAL NOT NULL,
+      sell_price REAL NOT NULL,
+      quantity REAL NOT NULL,
+      profit REAL NOT NULL,
+      fees REAL NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (grid_id) REFERENCES grids(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
   // Create indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_grids_user_id ON grids(user_id);
     CREATE INDEX IF NOT EXISTS idx_grids_status ON grids(status);
+    CREATE INDEX IF NOT EXISTS idx_profit_history_grid_id ON profit_history(grid_id);
+    CREATE INDEX IF NOT EXISTS idx_profit_history_user_id ON profit_history(user_id);
+    CREATE INDEX IF NOT EXISTS idx_profit_history_created_at ON profit_history(created_at);
   `);
 
   console.log('[DB] Database initialized successfully');
@@ -136,6 +158,68 @@ export const gridQueries: {
 
   findRunning: db.prepare(`
     SELECT * FROM grids WHERE status = 'RUNNING'
+  `),
+};
+
+// Profit history queries
+export const profitHistoryQueries: {
+  create: Statement<{
+    grid_id: string;
+    user_id: string;
+    buy_order_id: string;
+    sell_order_id: string;
+    buy_price: number;
+    sell_price: number;
+    quantity: number;
+    profit: number;
+    fees: number;
+    created_at: number;
+  }>;
+  findByGridId: Statement<[string]>;
+  findByUserId: Statement<[string]>;
+  findByUserIdWithDateRange: Statement<[string, number, number]>;
+  findByGridIdWithDateRange: Statement<[string, number, number]>;
+} = {
+  create: db.prepare<{
+    grid_id: string;
+    user_id: string;
+    buy_order_id: string;
+    sell_order_id: string;
+    buy_price: number;
+    sell_price: number;
+    quantity: number;
+    profit: number;
+    fees: number;
+    created_at: number;
+  }>(`
+    INSERT INTO profit_history (
+      grid_id, user_id, buy_order_id, sell_order_id,
+      buy_price, sell_price, quantity, profit, fees, created_at
+    )
+    VALUES (
+      @grid_id, @user_id, @buy_order_id, @sell_order_id,
+      @buy_price, @sell_price, @quantity, @profit, @fees, @created_at
+    )
+  `),
+
+  findByGridId: db.prepare<[string]>(`
+    SELECT * FROM profit_history WHERE grid_id = ? ORDER BY created_at DESC
+  `),
+
+  findByUserId: db.prepare<[string]>(`
+    SELECT * FROM profit_history WHERE user_id = ? ORDER BY created_at DESC
+  `),
+
+  findByUserIdWithDateRange: db.prepare<[string, number, number]>(`
+    SELECT * FROM profit_history
+    WHERE user_id = ? AND created_at >= ? AND created_at <= ?
+    ORDER BY created_at DESC
+  `),
+
+  findByGridIdWithDateRange: db.prepare<[string, number, number]>(`
+    SELECT * FROM profit_history
+    WHERE grid_id = ? AND created_at >= ? AND created_at <= ?
+    ORDER BY created_at DESC
   `),
 };
 
