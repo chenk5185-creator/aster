@@ -80,12 +80,33 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   ({ value, onChange, min, max, step = 1, ...props }, ref) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
+
+      // Allow empty string (user is clearing the field)
       if (val === '') {
+        onChange('' as any);
+        return;
+      }
+
+      // Allow intermediate input like "0." for "0.56"
+      // This handles cases where user is typing decimal numbers
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        // Only clamp on blur, not during typing
+        onChange(num);
+      }
+    };
+
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      if (val === '' || val === null || val === undefined) {
+        // On blur with empty field, set to min or 0
         onChange(min ?? 0);
         return;
       }
+
       const num = parseFloat(val);
       if (!isNaN(num)) {
+        // Clamp value on blur
         let clampedValue = num;
         if (min !== undefined) clampedValue = Math.max(min, clampedValue);
         if (max !== undefined) clampedValue = Math.min(max, clampedValue);
@@ -99,6 +120,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         type="number"
         value={value}
         onChange={handleChange}
+        onBlur={handleBlur}
         min={min}
         max={max}
         step={step}
